@@ -1,0 +1,70 @@
+## —— Makefile ——————————————————————————————————
+
+#URL assets :
+NAME = isName
+THEME = web/app/themes/$(NAME)
+ASSETS = $(THEME)/assets
+
+docker: ## lance le docker-compose
+	docker compose up -d
+
+server: ### lance le serveur
+	wp server --port=8000 --config=development.ini
+
+start: ## lance les deux
+	docker compose up -d
+	wp server --port=8000 --config=development.ini
+
+scss: # compile scss
+	$(eval name ?= all)
+	$(eval link ?= .)
+	sass --watch $(ASSETS)/scss/$(link)/$(name).scss:$(ASSETS)/css/$(name).css --style compressed
+
+branch: ### créer branch
+	$(eval name ?= branch)
+	git branch $(name)
+	git checkout $(name)
+	git add .
+	git commit -m "new branch $(name)"
+	git push -u origin $(name)
+
+pull: ### pull main
+	git checkout main
+	git pull
+
+asset:
+	cd $(ASSETS)
+
+asset-dev:
+	cd $(THEME) && npm run dev
+
+asset-build:
+	cd $(THEME) && npm run build
+
+install-theme:
+	composer require roots/acorn
+	cd web/app/themes && composer create-project roots/sage $(NAME)
+	cd $(THEME) && npm install && npm uninstall -D @tailwindcss/vite tailwindcss && npm install -D sass
+	mv $(THEME)/resources/css/app.css $(THEME)/resources/css/app.scss
+	mv $(THEME)/resources/css/editor.css $(THEME)/resources/css/editor.scss
+	rm -f $(THEME)/tailwind.config.js
+	sed -i "/import .*tailwindcss/d" $(THEME)/vite.config.js
+	sed -i "s/tailwindcss(),//" $(THEME)/vite.config.js
+	sed -i "s/app\.css/app.scss/g" $(THEME)/vite.config.js
+	sed -i "s/editor\.css/editor.scss/g" $(THEME)/vite.config.js
+	sed -i "s/disableTailwindColors: false/disableTailwindColors: true/" $(THEME)/vite.config.js
+	sed -i "s/disableTailwindFonts: false/disableTailwindFonts: true/" $(THEME)/vite.config.js
+	sed -i "s/disableTailwindFontSizes: false/disableTailwindFontSizes: true/" $(THEME)/vite.config.js
+	sed -i "s/app\.css/app.scss/" $(THEME)/resources/views/layouts/app.blade.php
+	sed -i "s/editor\.css/editor.scss/" $(THEME)/app/setup.php
+	echo "// SCSS prêt à l’emploi" > $(THEME)/resources/css/app.scss
+	echo "// SCSS prêt à l’emploi" > $(THEME)/resources/css/editor.scss
+	@echo "🎨 Thème Sage installé avec SCSS prêt à compiler"
+
+	
+recup-theme:
+	composer install
+	cd $(THEME) && composer install && yarn && && yarn add @roots/bud-sass --dev && yarn remove @roots/bud && yarn remove @roots/sage && yarn add @roots/bud --dev && yarn add @roots/sage --dev && yarn && composer install
+
+stop:
+	docker compose stop
