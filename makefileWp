@@ -1,9 +1,8 @@
 ## —— Makefile ——————————————————————————————————
 
-#URL assets :
+# Configuration du thème :
 NAME = isName
 THEME = web/app/themes/$(NAME)
-ASSETS = $(THEME)/assets
 
 docker: ## lance le docker-compose
 	docker compose up -d
@@ -11,14 +10,13 @@ docker: ## lance le docker-compose
 server: ### lance le serveur
 	wp server --port=8000 --config=development.ini
 
-start: ## lance les deux
+start: ## lance Docker, serveur WordPress et Vite
 	docker compose up -d
-	wp server --port=8000 --config=development.ini
+	wp server --port=8000 --config=development.ini &
+	make vite
 
-scss: # compile scss
-	$(eval name ?= all)
-	$(eval link ?= .)
-	sass --watch $(ASSETS)/scss/$(link)/$(name).scss:$(ASSETS)/css/$(name).css --style compressed
+vite: ## lance Vite en mode développement (watch)
+	cd $(THEME) && npm run dev
 
 branch: ### créer branch
 	$(eval name ?= branch)
@@ -32,19 +30,18 @@ pull: ### pull main
 	git checkout main
 	git pull
 
-asset:
-	cd $(ASSETS)
-
-asset-dev:
+asset-dev: ## lance Vite en mode développement
 	cd $(THEME) && npm run dev
 
-asset-build:
+asset-build: ## build de production avec Vite
 	cd $(THEME) && npm run build
 
 install-theme:
 	composer require roots/acorn
-	cd web/app/themes && composer create-project roots/sage $(NAME)
-	cd $(THEME) && npm install && npm uninstall -D @tailwindcss/vite tailwindcss && npm install -D sass
+	cd web/app/themes && composer create-project roots/sage $(NAME) --no-interaction
+	cd $(THEME) && npm install
+	cd $(THEME) && npm uninstall -D @tailwindcss/vite tailwindcss || true
+	cd $(THEME) && npm install -D sass
 	mv $(THEME)/resources/css/app.css $(THEME)/resources/css/app.scss
 	mv $(THEME)/resources/css/editor.css $(THEME)/resources/css/editor.scss
 	rm -f $(THEME)/tailwind.config.js
@@ -59,12 +56,29 @@ install-theme:
 	sed -i "s/editor\.css/editor.scss/" $(THEME)/app/setup.php
 	echo "// SCSS prêt à l’emploi" > $(THEME)/resources/css/app.scss
 	echo "// SCSS prêt à l’emploi" > $(THEME)/resources/css/editor.scss
-	@echo "🎨 Thème Sage installé avec SCSS prêt à compiler"
+	@echo "🎨 Thème Sage installé avec Vite et SCSS prêt à compiler"
+	mkdir -p $(THEME)/resources/css/pages
+	mkdir -p $(THEME)/resources/css/utilities
+	mkdir -p $(THEME)/resources/css/components
+	echo "// Utilities SCSS" > $(THEME)/resources/css/utilities/_index.scss
+	echo "body {\n    background-color: red;\n}" > $(THEME)/resources/css/utilities/_base.scss
+	echo "*,\n*::before,\n*::after {\n    box-sizing: border-box;\n}\n*:focus {\n    outline: none;\n}\n\nhtml,\nbody,\ndiv,\nspan,\napplet,\nobject,\niframe,\nh1,\nh2,\nh3,\nh4,\nh5,\nh6,\np,\nblockquote,\npre,\na,\nabbr,\nacronym,\naddress,\nbig,\ncite,\ncode,\ndel,\ndfn,\nem,\nimg,\nins,\nkbd,\nq,\ns,\nsamp,\nsmall,\nstrike,\nstrong,\nsub,\nsup,\ntt,\nvar,\nb,\nu,\ni,\ncenter,\ndl,\ndt,\ndd,\nol,\nul,\nli,\nfieldset,\nform,\nlabel,\nlegend,\ntable,\ncaption,\ntbody,\ntfoot,\nthead,\ntr,\nth,\ntd,\narticle,\naside,\ncanvas,\ndetails,\nembed,\nfigure,\nfigcaption,\nfooter,\nheader,\nhgroup,\nmenu,\nnav,\noutput,\nruby,\nsection,\nsummary,\ntime,\nmark,\naudio,\nvideo {\n    margin: 0;\n    padding: 0;\n    border: 0;\n    font: 100% inherit;\n    vertical-align: baseline;\n}\n\narticle,\naside,\ndetails,\nfigcaption,\nfigure,\nfooter,\nheader,\nhgroup,\nmenu,\nnav,\nsection {\n    display: block;\n}\n\nbody {\n    line-height: 1;\n}\n\nol,\nul {\n    list-style: none;\n}\n\nblockquote,\nq {\n    quotes: none;\n}\n\nblockquote::before,\nblockquote::after,\nq::before,\nq::after {\n    content: \"\";\n}\n\ntable {\n    border-collapse: collapse;\n    border-spacing: 0;\n}" > $(THEME)/resources/css/utilities/_reset.scss
+	echo "// SCSS functions" > $(THEME)/resources/css/utilities/_functions.scss
+	echo "// Font definitions" > $(THEME)/resources/css/utilities/_fonts.scss
+	echo "// SCSS variables" > $(THEME)/resources/css/utilities/_variables.scss
+	echo "@use 'utilities/reset';\n@use 'utilities/base';" > $(THEME)/resources/css/app.scss
+	mkdir -p $(THEME)/resources/views/components
+	mkdir -p $(THEME)/resources/views/pages
+	@echo "📁 Architecture SCSS créée : pages, utilities, components"
+	@echo "📁 Architecture Blade créée : components, pages"
 
 	
-recup-theme:
+recup-theme: ## récupère et met à jour les dépendances du thème
 	composer install
-	cd $(THEME) && composer install && yarn && && yarn add @roots/bud-sass --dev && yarn remove @roots/bud && yarn remove @roots/sage && yarn add @roots/bud --dev && yarn add @roots/sage --dev && yarn && composer install
+	cd $(THEME) && composer install
+	cd $(THEME) && npm install
+	@echo "✅ Dépendances du thème mises à jour"
 
 stop:
 	docker compose stop
+	fuser -k 8000/tcp
