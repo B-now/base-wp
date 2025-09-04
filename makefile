@@ -13,7 +13,7 @@ ADMIN_EMAIL ?= admin@localhost
 
 ## -------- SETUP PROJECT --------
 
-install-wp: check-env create-bedrock copy-env update-env generate-salts install-acf start-docker configure-wp install-theme activate-theme open-phpstorm
+install-wp: check-env create-bedrock copy-env update-env generate-salts install-acf start-docker configure-wp install-theme install-linters activate-theme open-phpstorm
 	@echo "🎉 Projet $(NAME) prêt !"
 
 check-env: ## Vérifie et crée le fichier .env si nécessaire
@@ -62,6 +62,12 @@ install-acf: ## Installe ACF (version gratuite) en mu-plugin
 	cd $(PROJECT_DIR) && cp -r web/app/plugins/advanced-custom-fields/* web/app/mu-plugins/advanced-custom-fields/
 	cd $(PROJECT_DIR) && rm -rf web/app/plugins/advanced-custom-fields
 	@echo "✅ ACF configuré en mu-plugin"
+
+install-linters: ## Installe les linters et outils de qualité
+	@echo "🔍 Installation des linters..."
+	cd $(PROJECT_DIR) && composer require --dev squizlabs/php_codesniffer wp-coding-standards/wpcs
+	cd $(PROJECT_DIR)/web/app/themes/$(NAME) && npm install --save-dev stylelint stylelint-config-standard-scss eslint @wordpress/eslint-plugin @typescript-eslint/parser @typescript-eslint/eslint-plugin prettier eslint-config-prettier eslint-plugin-prettier
+	@echo "✅ Linters installés"
 
 start-docker: ## Démarre Docker et attend que la base soit prête
 	@echo "🐳 Démarrage de Docker..."

@@ -41,7 +41,8 @@ install-theme:
 	cd web/app/themes && composer create-project roots/sage $(NAME) --no-interaction
 	cd $(THEME) && npm install
 	cd $(THEME) && npm uninstall -D @tailwindcss/vite tailwindcss || true
-	cd $(THEME) && npm install -D sass
+	cd $(THEME) && npm install -D sass typescript @types/node
+	cd $(THEME) && npm install -D @typescript-eslint/parser @typescript-eslint/eslint-plugin
 	mv $(THEME)/resources/css/app.css $(THEME)/resources/css/app.scss
 	mv $(THEME)/resources/css/editor.css $(THEME)/resources/css/editor.scss
 	rm -f $(THEME)/tailwind.config.js
@@ -71,6 +72,14 @@ install-theme:
 	mkdir -p $(THEME)/resources/views/pages
 	@echo "📁 Architecture SCSS créée : pages, utilities, components"
 	@echo "📁 Architecture Blade créée : components, pages"
+	@echo "📜 Configuration TypeScript..."
+	mv $(THEME)/resources/js/app.js $(THEME)/resources/js/app.ts
+	mv $(THEME)/resources/js/editor.js $(THEME)/resources/js/editor.ts
+	sed -i "s/app\.js/app.ts/g" $(THEME)/vite.config.js
+	sed -i "s/editor\.js/editor.ts/g" $(THEME)/vite.config.js
+	sed -i "s/app\.js/app.ts/" $(THEME)/resources/views/layouts/app.blade.php
+	sed -i "s/editor\.js/editor.ts/" $(THEME)/app/setup.php
+	@echo "✅ TypeScript configuré"
 
 	
 recup-theme: ## récupère et met à jour les dépendances du thème
@@ -82,3 +91,94 @@ recup-theme: ## récupère et met à jour les dépendances du thème
 stop:
 	docker compose stop
 	fuser -k 8000/tcp
+
+## —— Linters et Code Quality ——————————————————————————————————
+
+lint-php: ## Lint PHP avec PHP_CodeSniffer et WordPress Coding Standards
+	@echo "🔍 Linting PHP avec WordPress Coding Standards..."
+	./vendor/bin/phpcs --standard=WordPress --extensions=php --ignore=vendor,node_modules,web/app/plugins,web/app/mu-plugins .
+
+lint-php-fix: ## Auto-correction PHP avec PHP_CodeSniffer
+	@echo "🔧 Auto-correction PHP..."
+	./vendor/bin/phpcbf --standard=WordPress --extensions=php --ignore=vendor,node_modules,web/app/plugins,web/app/mu-plugins .
+
+lint-scss: ## Lint SCSS avec stylelint
+	@echo "🎨 Linting SCSS..."
+	cd $(THEME) && npx stylelint "resources/css/**/*.scss"
+
+lint-scss-fix: ## Auto-correction SCSS
+	@echo "🔧 Auto-correction SCSS..."
+	cd $(THEME) && npx stylelint "resources/css/**/*.scss" --fix
+
+lint-js: ## Lint JavaScript avec ESLint
+	@echo "📜 Linting JavaScript..."
+	cd $(THEME) && npx eslint "resources/js/**/*.js"
+
+lint-js-fix: ## Auto-correction JavaScript
+	@echo "🔧 Auto-correction JavaScript..."
+	cd $(THEME) && npx eslint "resources/js/**/*.js" --fix
+
+lint-ts: ## Lint TypeScript avec ESLint (principal)
+	@echo "📜 Linting TypeScript..."
+	cd $(THEME) && npx eslint "resources/js/**/*.ts" "resources/js/**/*.tsx"
+
+lint-ts-fix: ## Auto-correction TypeScript (principal)
+	@echo "🔧 Auto-correction TypeScript..."
+	cd $(THEME) && npx eslint "resources/js/**/*.ts" "resources/js/**/*.tsx" --fix
+
+format-js: ## Formatage JavaScript avec Prettier
+	@echo "🎨 Formatage JavaScript..."
+	cd $(THEME) && npx prettier --write "resources/js/**/*.js"
+
+format-ts: ## Formatage TypeScript avec Prettier
+	@echo "🎨 Formatage TypeScript..."
+	cd $(THEME) && npx prettier --write "resources/js/**/*.ts" "resources/js/**/*.tsx"
+
+format-all-js: ## Formatage de tous les fichiers JS/TS
+	@echo "🎨 Formatage de tous les fichiers JS/TS..."
+	cd $(THEME) && npx prettier --write "resources/js/**/*.{js,ts,tsx}"
+
+lint-all: ## Lance tous les linters
+	@echo "🚀 Lancement de tous les linters..."
+	make lint-php
+	make lint-scss
+	make lint-ts
+	make lint-js
+
+lint-all-fix: ## Auto-correction de tous les linters
+	@echo "🔧 Auto-correction de tous les linters..."
+	make lint-php-fix
+	make lint-scss-fix
+	make lint-ts-fix
+	make lint-js-fix
+
+format-all: ## Formatage de tous les fichiers
+	@echo "🎨 Formatage de tous les fichiers..."
+	make format-all-js
+
+## —— Sécurité et Audit ——————————————————————————————————
+
+security-check: ## Vérification de sécurité avec Composer
+	@echo "🔒 Vérification de sécurité Composer..."
+	composer audit
+
+wp-security: ## Vérification de sécurité WordPress
+	@echo "🔒 Vérification de sécurité WordPress..."
+	wp plugin list --status=active --format=table
+	wp theme list --status=active --format=table
+	@echo "⚠️  Vérifiez manuellement les plugins et thèmes actifs"
+
+## —— Performance ——————————————————————————————————
+
+wp-cache: ## Optimisation du cache WordPress
+	@echo "⚡ Optimisation du cache..."
+	wp cache flush
+	wp rewrite flush
+	wp transient delete --all
+
+wp-optimize: ## Optimisation générale WordPress
+	@echo "⚡ Optimisation générale..."
+	wp db optimize
+	wp db repair
+	wp cache flush
+	wp rewrite flush
