@@ -1,0 +1,13 @@
+@use "../utilities";
+@use "sanitize";
+@use "sanitize_assets";
+@use "sanitize_forms";
+
+html {
+  font-size: 62.5%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 3rem;
+  scrollbar-width: thin;
+  background-color: utilities.$neutral-200;
+  margin: 0 !important;
+}

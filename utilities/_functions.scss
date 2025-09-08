@@ -1,0 +1,7 @@
+$spacing-multiplier : 0.8;
+
+@function space($multiplicand) {
+  $space: calc($multiplicand * $spacing-multiplier);
+
+  @return #{$space}rem;
+}

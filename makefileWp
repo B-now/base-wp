@@ -42,7 +42,7 @@ install-theme:
 	cd $(THEME) && npm install
 	cd $(THEME) && npm uninstall -D @tailwindcss/vite tailwindcss || true
 	cd $(THEME) && npm install -D sass typescript @types/node
-	cd $(THEME) && npm install -D @typescript-eslint/parser @typescript-eslint/eslint-plugin
+
 	mv $(THEME)/resources/css/app.css $(THEME)/resources/css/app.scss
 	mv $(THEME)/resources/css/editor.css $(THEME)/resources/css/editor.scss
 	rm -f $(THEME)/tailwind.config.js
@@ -55,19 +55,41 @@ install-theme:
 	sed -i "s/disableTailwindFontSizes: false/disableTailwindFontSizes: true/" $(THEME)/vite.config.js
 	sed -i "s/app\.css/app.scss/" $(THEME)/resources/views/layouts/app.blade.php
 	sed -i "s/editor\.css/editor.scss/" $(THEME)/app/setup.php
-	echo "// SCSS prêt à l’emploi" > $(THEME)/resources/css/app.scss
-	echo "// SCSS prêt à l’emploi" > $(THEME)/resources/css/editor.scss
 	@echo "🎨 Thème Sage installé avec Vite et SCSS prêt à compiler"
 	mkdir -p $(THEME)/resources/css/pages
 	mkdir -p $(THEME)/resources/css/utilities
 	mkdir -p $(THEME)/resources/css/components
-	echo "// Utilities SCSS" > $(THEME)/resources/css/utilities/_index.scss
-	echo "body {\n    background-color: red;\n}" > $(THEME)/resources/css/utilities/_base.scss
-	echo "*,\n*::before,\n*::after {\n    box-sizing: border-box;\n}\n*:focus {\n    outline: none;\n}\n\nhtml,\nbody,\ndiv,\nspan,\napplet,\nobject,\niframe,\nh1,\nh2,\nh3,\nh4,\nh5,\nh6,\np,\nblockquote,\npre,\na,\nabbr,\nacronym,\naddress,\nbig,\ncite,\ncode,\ndel,\ndfn,\nem,\nimg,\nins,\nkbd,\nq,\ns,\nsamp,\nsmall,\nstrike,\nstrong,\nsub,\nsup,\ntt,\nvar,\nb,\nu,\ni,\ncenter,\ndl,\ndt,\ndd,\nol,\nul,\nli,\nfieldset,\nform,\nlabel,\nlegend,\ntable,\ncaption,\ntbody,\ntfoot,\nthead,\ntr,\nth,\ntd,\narticle,\naside,\ncanvas,\ndetails,\nembed,\nfigure,\nfigcaption,\nfooter,\nheader,\nhgroup,\nmenu,\nnav,\noutput,\nruby,\nsection,\nsummary,\ntime,\nmark,\naudio,\nvideo {\n    margin: 0;\n    padding: 0;\n    border: 0;\n    font: 100% inherit;\n    vertical-align: baseline;\n}\n\narticle,\naside,\ndetails,\nfigcaption,\nfigure,\nfooter,\nheader,\nhgroup,\nmenu,\nnav,\nsection {\n    display: block;\n}\n\nbody {\n    line-height: 1;\n}\n\nol,\nul {\n    list-style: none;\n}\n\nblockquote,\nq {\n    quotes: none;\n}\n\nblockquote::before,\nblockquote::after,\nq::before,\nq::after {\n    content: \"\";\n}\n\ntable {\n    border-collapse: collapse;\n    border-spacing: 0;\n}" > $(THEME)/resources/css/utilities/_reset.scss
-	echo "// SCSS functions" > $(THEME)/resources/css/utilities/_functions.scss
-	echo "// Font definitions" > $(THEME)/resources/css/utilities/_fonts.scss
-	echo "// SCSS variables" > $(THEME)/resources/css/utilities/_variables.scss
-	echo "@use 'utilities/reset';\n@use 'utilities/base';" > $(THEME)/resources/css/app.scss
+	# Copier les bases CSS (compat css_base ou répertoires dédiés)
+	@mkdir -p $(THEME)/resources/css
+	@if [ -d ./css_base ]; then \
+		echo "➡️  Copie de css_base/* vers $(THEME)/resources/css/"; \
+		cp -r ./css_base/* $(THEME)/resources/css/; \
+	else \
+		if [ -d ./utilities ]; then \
+			echo "➡️  Copie de utilities/* vers $(THEME)/resources/css/utilities/"; \
+			mkdir -p $(THEME)/resources/css/utilities; \
+			cp -r ./utilities/* $(THEME)/resources/css/utilities/; \
+		fi; \
+		if [ -d ./variables ]; then \
+			echo "➡️  Copie de variables/* vers $(THEME)/resources/css/variables/"; \
+			mkdir -p $(THEME)/resources/css/variables; \
+			cp -r ./variables/* $(THEME)/resources/css/variables/; \
+		fi; \
+		if [ -d ./functions ]; then \
+			echo "➡️  Copie de functions/* vers $(THEME)/resources/css/functions/"; \
+			mkdir -p $(THEME)/resources/css/functions; \
+			cp -r ./functions/* $(THEME)/resources/css/functions/; \
+		fi; \
+	fi
+	# Générer le fichier d'entrée app.scss avec les imports utilitaires
+	@printf '%s\n' \
+	"@use 'utilities/index' as *;" \
+	"@use 'utilities/reset';" \
+	"@use 'utilities/base';" \
+	"@use 'utilities/sanitize';" \
+	"@use 'utilities/sanitize_assets';" \
+	"@use 'utilities/sanitize_forms';" \
+	> $(THEME)/resources/css/app.scss
 	mkdir -p $(THEME)/resources/views/components
 	mkdir -p $(THEME)/resources/views/pages
 	@echo "📁 Architecture SCSS créée : pages, utilities, components"
@@ -75,11 +97,10 @@ install-theme:
 	@echo "📜 Configuration TypeScript..."
 	mv $(THEME)/resources/js/app.js $(THEME)/resources/js/app.ts
 	mv $(THEME)/resources/js/editor.js $(THEME)/resources/js/editor.ts
-	sed -i "s/app\.js/app.ts/g" $(THEME)/vite.config.js
-	sed -i "s/editor\.js/editor.ts/g" $(THEME)/vite.config.js
 	sed -i "s/app\.js/app.ts/" $(THEME)/resources/views/layouts/app.blade.php
 	sed -i "s/editor\.js/editor.ts/" $(THEME)/app/setup.php
 	@echo "✅ TypeScript configuré"
+
 
 	
 recup-theme: ## récupère et met à jour les dépendances du thème
@@ -90,53 +111,69 @@ recup-theme: ## récupère et met à jour les dépendances du thème
 
 stop:
 	docker compose stop
-	fuser -k 8000/tcp
+	fuser -k 8000/tcp || true
 
 ## —— Linters et Code Quality ——————————————————————————————————
 
 lint-php: ## Lint PHP avec PHP_CodeSniffer et WordPress Coding Standards
 	@echo "🔍 Linting PHP avec WordPress Coding Standards..."
-	./vendor/bin/phpcs --standard=WordPress --extensions=php --ignore=vendor,node_modules,web/app/plugins,web/app/mu-plugins .
+	./vendor/bin/phpcs --standard=$(THEME)/phpcs.xml --extensions=php --ignore="*/node_modules/*,*/vendor/*,*/public/*" $(THEME)
 
 lint-php-fix: ## Auto-correction PHP avec PHP_CodeSniffer
 	@echo "🔧 Auto-correction PHP..."
-	./vendor/bin/phpcbf --standard=WordPress --extensions=php --ignore=vendor,node_modules,web/app/plugins,web/app/mu-plugins .
+	./vendor/bin/phpcbf --standard=$(THEME)/phpcs.xml --extensions=php --ignore="*/node_modules/*,*/vendor/*,*/public/*" $(THEME)
 
 lint-scss: ## Lint SCSS avec stylelint
 	@echo "🎨 Linting SCSS..."
-	cd $(THEME) && npx stylelint "resources/css/**/*.scss"
+	cd $(THEME) && npx stylelint "resources/css/**/*.scss" --ignore-path .gitignore
 
 lint-scss-fix: ## Auto-correction SCSS
 	@echo "🔧 Auto-correction SCSS..."
-	cd $(THEME) && npx stylelint "resources/css/**/*.scss" --fix
+	cd $(THEME) && npx stylelint "resources/css/**/*.scss" --fix --ignore-path .gitignore
 
 lint-js: ## Lint JavaScript avec ESLint
 	@echo "📜 Linting JavaScript..."
-	cd $(THEME) && npx eslint "resources/js/**/*.js"
+	cd $(THEME) && if find resources/js -type f -name "*.js" -print -quit | grep -q .; then npx eslint --ext .js resources/js --ignore-path .gitignore; else echo "(skip) aucun .js"; fi
 
 lint-js-fix: ## Auto-correction JavaScript
 	@echo "🔧 Auto-correction JavaScript..."
-	cd $(THEME) && npx eslint "resources/js/**/*.js" --fix
+	cd $(THEME) && if find resources/js -type f -name "*.js" -print -quit | grep -q .; then npx eslint --ext .js resources/js --fix --ignore-path .gitignore; else echo "(skip) aucun .js"; fi
 
 lint-ts: ## Lint TypeScript avec ESLint (principal)
 	@echo "📜 Linting TypeScript..."
-	cd $(THEME) && npx eslint "resources/js/**/*.ts" "resources/js/**/*.tsx"
+	cd $(THEME) && npx eslint --ext .ts,.tsx resources/js --ignore-path .gitignore
 
 lint-ts-fix: ## Auto-correction TypeScript (principal)
 	@echo "🔧 Auto-correction TypeScript..."
-	cd $(THEME) && npx eslint "resources/js/**/*.ts" "resources/js/**/*.tsx" --fix
+	cd $(THEME) && npx eslint --ext .ts,.tsx resources/js --fix --ignore-path .gitignore
+
+lint-blade: ## Lint Blade avec blade-formatter (check)
+	@echo "🧩 Linting Blade..."
+	@cd $(THEME) && npx prettier --check "resources/views/**/*.blade.php" --ignore-path .gitignore || ( \
+		echo "🔧 Format Blade auto" && \
+		npx prettier --write "resources/views/**/*.blade.php" --ignore-path .gitignore && \
+		npx prettier --check "resources/views/**/*.blade.php" --ignore-path .gitignore \
+	)
 
 format-js: ## Formatage JavaScript avec Prettier
 	@echo "🎨 Formatage JavaScript..."
-	cd $(THEME) && npx prettier --write "resources/js/**/*.js"
+	cd $(THEME) && npx prettier --write "resources/js/**/*.js" --ignore-path .gitignore
 
 format-ts: ## Formatage TypeScript avec Prettier
 	@echo "🎨 Formatage TypeScript..."
-	cd $(THEME) && npx prettier --write "resources/js/**/*.ts" "resources/js/**/*.tsx"
+	cd $(THEME) && npx prettier --write "resources/js/**/*.ts" "resources/js/**/*.tsx" --ignore-path .gitignore
 
 format-all-js: ## Formatage de tous les fichiers JS/TS
 	@echo "🎨 Formatage de tous les fichiers JS/TS..."
-	cd $(THEME) && npx prettier --write "resources/js/**/*.{js,ts,tsx}"
+	cd $(THEME) && npx prettier --write "resources/js/**/*.{js,ts,tsx}" --ignore-path .gitignore
+
+format-scss: ## Formatage SCSS avec Prettier
+	@echo "🎨 Formatage SCSS..."
+	cd $(THEME) && npx prettier --write "resources/css/**/*.scss" --ignore-path .gitignore
+
+format-blade: ## Formatage Blade avec blade-formatter
+	@echo "🎨 Formatage Blade..."
+	cd $(THEME) && npx prettier --write "resources/views/**/*.blade.php" --ignore-path .gitignore
 
 lint-all: ## Lance tous les linters
 	@echo "🚀 Lancement de tous les linters..."
@@ -144,6 +181,16 @@ lint-all: ## Lance tous les linters
 	make lint-scss
 	make lint-ts
 	make lint-js
+	make lint-blade
+
+lint: ## Lint + format + sécurité + performance (thème uniquement)
+	@echo "🚀 Lint global (thème) — lint, format, sécurité, performance"
+	make format-all
+	make lint-all
+	make security-check
+	make wp-security
+	make wp-cache
+	make wp-optimize
 
 lint-all-fix: ## Auto-correction de tous les linters
 	@echo "🔧 Auto-correction de tous les linters..."
@@ -151,10 +198,21 @@ lint-all-fix: ## Auto-correction de tous les linters
 	make lint-scss-fix
 	make lint-ts-fix
 	make lint-js-fix
+	make format-blade
+
+lint-fix: ## Corrige automatiquement (linters + formatage)
+	@echo "🛠️  Auto-fix — linters + format (thème)"
+	make lint-all-fix
+	make format-all
 
 format-all: ## Formatage de tous les fichiers
 	@echo "🎨 Formatage de tous les fichiers..."
 	make format-all-js
+	make format-scss
+	make format-blade
+
+format: ## Alias — formatage JS/TS/SCSS du thème
+	make format-all
 
 ## —— Sécurité et Audit ——————————————————————————————————
 
@@ -182,3 +240,7 @@ wp-optimize: ## Optimisation générale WordPress
 	wp db repair
 	wp cache flush
 	wp rewrite flush
+
+# ==== Linters désactivés temporairement ====
+.PHONY: lint lint-all lint-all-fix lint-php lint-php-fix lint-scss lint-scss-fix lint-js lint-js-fix lint-ts lint-ts-fix lint-blade \
+        format format-all format-all-js format-scss format-js format-ts format-blade

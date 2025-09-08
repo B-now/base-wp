@@ -1,0 +1,40 @@
+/* stylelint-disable */
+
+/**
+ * 1. Change the inconsistent appearance in all browsers (opinionated).
+ * 2. Add typography inheritance in all browsers (opinionated).
+ */
+:where(button, input, select, textarea) {
+  background-color: transparent; /* 1 */
+  border: 1px solid WindowFrame; /* 1 */
+  color: inherit; /* 1 */
+  font: inherit; /* 2 */
+  letter-spacing: inherit; /* 2 */
+  padding: 0.25em 0.375em; /* 1 */
+}
+
+/**
+ * Change the inconsistent appearance in all browsers (opinionated).
+ */
+:where(select) {
+  -webkit-appearance: none;
+  appearance: none;
+  background: url("data:image/svg+xml;charset=utf-8,%3Csvg width='13' height='8' viewBox='0 0 13 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M6.24905 7.23298L12.6072 1.09301L11.7476 0.202868L6.27959 5.48324L0.999216 0.015255L0.109078 0.874851L6.24905 7.23298Z' fill='%23fff'/%3E%3C/svg%3E") no-repeat right center / 1em;
+  border-radius: 0;
+  padding-right: 1em;
+}
+
+/**
+ * Don't show the arrow for multiple choice selects
+ */
+:where(select[multiple]) {
+  background-image: none;
+}
+
+/**
+ * Remove the border and padding in all browsers (opinionated).
+ */
+:where([type='color' i], [type='range' i]) {
+  border-width: 0;
+  padding: 0;
+}
