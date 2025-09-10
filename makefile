@@ -90,7 +90,7 @@ start-docker: ## Démarre Docker et attend que la base soit prête
 	done
 	@echo "✅ Docker démarré et base de données prête"
 	@echo "🗄️  Création de la base de données..."
-	cd $(PROJECT_DIR) && docker compose exec -T database mysql -uroot -ppassword -e "CREATE DATABASE IF NOT EXISTS $(NAME);"
+	cd $(PROJECT_DIR) && docker compose exec -T database mysql -uroot -ppassword -e "CREATE DATABASE IF NOT EXISTS \`$(NAME)\`;"
 	@echo "✅ Base de données créée"
 
 configure-wp: ## Configure WordPress automatiquement (sans interaction)
@@ -103,7 +103,7 @@ configure-wp: ## Configure WordPress automatiquement (sans interaction)
 	done
 	@echo "✅ DB OK"
 	# Installer WP si non installé, avec quelques tentatives de retry
-	@retries=0; max=5; \
+	@retries=0; max=20; \
 	until cd $(PROJECT_DIR) && wp core is-installed --allow-root >/dev/null 2>&1 || \
 		cd $(PROJECT_DIR) && wp core install --url=localhost:8000 \
 		  --title="$(shell echo $(NAME) | sed 's/[-_]/ /g' | sed 's/\b\w/\U&/g')" \
@@ -156,6 +156,11 @@ seed-css: ## Copie utilities/variables/functions SCSS du squelette dans le thèm
 			cp -r ./functions/* "$$theme_dir/resources/css/functions/"; \
 		fi; \
 	fi; \
+	if [ -d ./components ]; then \
+		echo "➡️  Copie de ./components → $$theme_dir/resources/css/components"; \
+		mkdir -p "$$theme_dir/resources/css/components"; \
+		cp -r ./components/* "$$theme_dir/resources/css/components/"; \
+	fi; \
 	: # Générer app.scss d'entrée avec nos imports utilitaires \
 	mkdir -p "$$theme_dir/resources/css"; \
 	printf '%s\n' \
@@ -165,6 +170,10 @@ seed-css: ## Copie utilities/variables/functions SCSS du squelette dans le thèm
 	"@use 'utilities/sanitize';" \
 	"@use 'utilities/sanitize_assets';" \
 	"@use 'utilities/sanitize_forms';" \
+	"@use 'components/button';" \
+	"@use 'components/title';" \
+	"@use 'components/container';" \
+	"@use 'components/text';" \
 	> "$$theme_dir/resources/css/app.scss"; \
 	echo "✅ Utilitaires SCSS copiés"
 

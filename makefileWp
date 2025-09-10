@@ -18,6 +18,53 @@ start: ## lance Docker, serveur WordPress et Vite
 vite: ## lance Vite en mode développement (watch)
 	cd $(THEME) && npm run dev
 
+## -------- Pages (WP-CLI) --------
+
+create-page: ## Crée une page WordPress et génère SCSS/TS (pages/<slug>.*)
+	@set -e; \
+	title="$${TITLE}"; if [ -z "$$title" ]; then printf "Titre: "; read title; fi; \
+	slug="$${SLUG}";  if [ -z "$$slug" ];  then printf "Slug (optionnel, Entrée pour auto): "; read slug; fi; \
+	status="$${STATUS}"; [ -n "$$status" ] || status=publish; \
+	set -- --post_type=page --post_title="$$title" --post_status="$$status"; \
+	if [ -n "$$slug" ]; then set -- "$$@" --post_name="$$slug"; fi; \
+	echo "📝 Création: $$title (slug: $$slug, statut: $$status)"; \
+	id=$$(wp post create "$$@" --porcelain --allow-root); \
+	echo "✅ Page créée: ID=$$id"; \
+	page_slug="$$slug"; if [ -z "$$page_slug" ]; then page_slug=$$(wp post get $$id --field=post_name --allow-root); fi; \
+	scss_path="$(THEME)/resources/css/pages/$$page_slug.scss"; \
+	ts_dir="$(THEME)/resources/js/pages"; ts_path="$$ts_dir/$$page_slug.ts"; \
+	mkdir -p "$(THEME)/resources/css/pages" "$$ts_dir"; \
+	if [ ! -f "$$scss_path" ]; then printf "/* Page: %s */\n.page-%s {\n}\n" "$$title" "$$page_slug" > "$$scss_path"; echo "🎨 SCSS créé: $$scss_path"; else echo "🎨 SCSS déjà présent: $$scss_path"; fi; \
+	if [ ! -f "$$ts_path" ]; then \
+		pascal=$$(printf "%s" "$$page_slug" | sed -E 's/(^|[-_])([a-zA-Z])/\U\2/g'); \
+		printf "%s\n" \
+		"// Page: $$title" \
+		"export const init$${pascal}Page = () => {" \
+		"  console.debug('[page:$$page_slug] init');" \
+		"};" \
+		"" \
+		"if (document.readyState === 'loading') {" \
+		"  document.addEventListener('DOMContentLoaded', () => init$${pascal}Page());" \
+		"} else {" \
+		"  init$${pascal}Page();" \
+		"}" > "$$ts_path"; \
+		echo "🧩 TS créé: $$ts_path"; \
+	else \
+		echo "🧩 TS déjà présent: $$ts_path"; \
+	fi; \
+	# Création du template Blade \
+	blade_path="$(THEME)/resources/views/pages/$$page_slug.blade.php"; \
+	mkdir -p "$(THEME)/resources/views/pages"; \
+	if [ ! -f "$$blade_path" ]; then \
+		printf "{{--\n  Template Name: $$title\n--}}\n\n@extends('layouts.app')\n\n@section('vite-head')\n  @vite(['resources/css/pages/$$page_slug.scss', 'resources/js/pages/$$page_slug.ts'])\n@endsection\n\n@section('content')\n  $$title\n@endsection\n" > "$$blade_path"; \
+		echo "🧩 Blade créé: $$blade_path"; \
+	else \
+		echo "🧩 Blade déjà présent: $$blade_path"; \
+	fi; \
+	# Affectation du template à la page \
+	wp post meta update $$id _wp_page_template "pages/$$page_slug.blade.php" --allow-root >/dev/null 2>&1 || true; \
+	wp post list --post_type=page --fields=ID,post_title,post_name,post_status --allow-root | grep "^$$id\\b" || true
+
 branch: ### créer branch
 	$(eval name ?= branch)
 	git branch $(name)
@@ -45,6 +92,7 @@ install-theme:
 
 	mv $(THEME)/resources/css/app.css $(THEME)/resources/css/app.scss
 	mv $(THEME)/resources/css/editor.css $(THEME)/resources/css/editor.scss
+	echo "" > $(THEME)/resources/css/editor.scss
 	rm -f $(THEME)/tailwind.config.js
 	sed -i "/import .*tailwindcss/d" $(THEME)/vite.config.js
 	sed -i "s/tailwindcss(),//" $(THEME)/vite.config.js
@@ -80,6 +128,11 @@ install-theme:
 			mkdir -p $(THEME)/resources/css/functions; \
 			cp -r ./functions/* $(THEME)/resources/css/functions/; \
 		fi; \
+	fi; \
+	if [ -d ./components ]; then \
+		echo "➡️  Copie de components/* vers $(THEME)/resources/css/components/"; \
+		mkdir -p $(THEME)/resources/css/components; \
+		cp -r ./components/* $(THEME)/resources/css/components/; \
 	fi
 	# Générer le fichier d'entrée app.scss avec les imports utilitaires
 	@printf '%s\n' \
@@ -89,6 +142,10 @@ install-theme:
 	"@use 'utilities/sanitize';" \
 	"@use 'utilities/sanitize_assets';" \
 	"@use 'utilities/sanitize_forms';" \
+	"@use 'components/button';" \
+	"@use 'components/title';" \
+	"@use 'components/container';" \
+	"@use 'components/text';" \
 	> $(THEME)/resources/css/app.scss
 	mkdir -p $(THEME)/resources/views/components
 	mkdir -p $(THEME)/resources/views/pages
