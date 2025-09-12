@@ -56,14 +56,223 @@ create-page: ## Crée une page WordPress et génère SCSS/TS (pages/<slug>.*)
 	blade_path="$(THEME)/resources/views/pages/$$page_slug.blade.php"; \
 	mkdir -p "$(THEME)/resources/views/pages"; \
 	if [ ! -f "$$blade_path" ]; then \
-		printf "{{--\n  Template Name: $$title\n--}}\n\n@extends('layouts.app')\n\n@section('vite-head')\n  @vite(['resources/css/pages/$$page_slug.scss', 'resources/js/pages/$$page_slug.ts'])\n@endsection\n\n@section('content')\n  $$title\n@endsection\n" > "$$blade_path"; \
+		printf "{{--\n  Template Name: $$title\n--}}\n\n@extends('layouts.app')\n\n@push('vite-head')\n  @vite(['resources/css/pages/$$page_slug.scss', 'resources/js/pages/$$page_slug.ts'])\n@endpush\n\n@section('content')\n\n@endsection\n" > "$$blade_path"; \
 		echo "🧩 Blade créé: $$blade_path"; \
 	else \
 		echo "🧩 Blade déjà présent: $$blade_path"; \
 	fi; \
+	# (désactivé) Création auto d'un groupe ACF — aucun champ généré par défaut \
 	# Affectation du template à la page \
 	wp post meta update $$id _wp_page_template "pages/$$page_slug.blade.php" --allow-root >/dev/null 2>&1 || true; \
 	wp post list --post_type=page --fields=ID,post_title,post_name,post_status --allow-root | grep "^$$id\\b" || true
+
+add-component: ## Ajoute un composant à une page existante
+	@set -e; \
+	echo "📋 Pages disponibles:"; \
+	wp post list --post_type=page --fields=ID,post_title,post_name --format=table --allow-root; \
+	echo ""; \
+	page_id="$${PAGE_ID}"; if [ -z "$$page_id" ]; then printf "ID de la page: "; read page_id; fi; \
+	page_title=$$(wp post get $$page_id --field=post_title --allow-root); \
+	page_slug=$$(wp post get $$page_id --field=post_name --allow-root); \
+	echo "📄 Page sélectionnée: $$page_title ($$page_slug)"; \
+	echo ""; \
+	echo "🧩 Composants disponibles:"; \
+	echo "1) titre-texte"; \
+	echo "2) image-texte-bouton"; \
+	echo ""; \
+	component="$${COMPONENT}"; if [ -z "$$component" ]; then printf "Numéro du composant (1-2): "; read component; fi; \
+	case "$$component" in \
+		1) component_name="titre-texte"; component_fields="titre,texte"; ;; \
+		2) component_name="image-texte-bouton"; component_fields="image,texte,texte_bouton,lien_bouton"; ;; \
+		*) echo "❌ Composant invalide"; exit 1; ;; \
+	esac; \
+	echo "🔧 Ajout du composant: $$component_name"; \
+	echo ""; \
+	group_title="$${GROUP_TITLE}"; if [ -z "$$group_title" ]; then printf "Titre du groupe ACF (Entrée pour '$$component_name'): "; read group_title; fi; \
+	if [ -z "$$group_title" ]; then group_title="$$component_name"; fi; \
+	echo "📝 Titre du groupe ACF: $$group_title"; \
+	# Nom (name) du champ group interne basé sur le titre (sans accents, _ ) \
+	group_field_name=$$(printf "%s" "$$group_title" | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed -E 's/[[:space:]]+/_/g' | sed -E 's/[^a-z0-9_]+/_/g' | sed -E 's/^_+|_+$$//g'); \
+	[ -n "$$group_field_name" ] || group_field_name=$$(printf "%s" "$$group_title" | tr '[:upper:]' '[:lower:]' | sed -E 's/[[:space:]]+/_/g' | sed -E 's/[^a-z0-9_]+/_/g' | sed -E 's/^_+|_+$$//g'); \
+	# Fichier Blade du composant (pour annotations facultatives) \
+	spec_file="$(THEME)/resources/views/components/$$component_name.blade.php"; \
+	# Ajouter les champs ACF au groupe de la page \
+	acf_file="$(THEME)/app/acf/$$page_slug.php"; \
+	# Créer un fichier ACF minimal s'il n'existe pas (groupe vide, prêt pour insertion) \
+	if [ ! -f "$$acf_file" ]; then \
+		echo "🆕 Création du fichier ACF: $$acf_file"; \
+		mkdir -p "$(THEME)/app/acf"; \
+		# Calcul d'une clé de groupe stable basée sur le titre (sans accents), espaces -> _ \
+		group_slug="$$page_slug"; \
+		# Si iconv indisponible, fallback simple \
+		[ -n "$$group_slug" ] || group_slug=$$(printf "%s" "$$page_title" | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed -E 's/[[:space:]]+/_/g' | sed -E 's/[^a-z0-9_]+/_/g' | sed -E 's/^_+|_+$$//g'); \
+		base_group_key="$$group_slug"; \
+		unique_group_key="$$base_group_key"; \
+		idx=2; \
+		while grep -R --include='*.php' -q "'key' => '$$unique_group_key'" "$(THEME)/app/acf" 2>/dev/null; do \
+			unique_group_key="$$base_group_key-$$idx"; \
+			idx=$$((idx + 1)); \
+		done; \
+		cat > "$$acf_file" <<-PHP
+		<?php
+		add_action( 'acf/include_fields', function() {
+			if ( ! function_exists( 'acf_add_local_field_group' ) ) {
+				return;
+			}
+
+			acf_add_local_field_group( array(
+				'key' => '$$unique_group_key',
+				'title' => '$$page_title',
+				'fields' => array(
+				),
+				'location' => array(
+					array(
+						array(
+							'param' => 'post_template',
+							'operator' => '==',
+							'value' => 'pages/$$page_slug.blade.php',
+						),
+					),
+				),
+				'menu_order' => 0,
+				'position' => 'normal',
+				'style' => 'default',
+				'label_placement' => 'top',
+				'instruction_placement' => 'label',
+				'hide_on_screen' => '',
+				'active' => true,
+				'description' => '',
+				'show_in_rest' => 0,
+			) );
+		} );
+		PHP
+	fi; \
+	if [ -f "$$acf_file" ]; then \
+		echo "📝 Ajout des champs ACF pour $$component_name..."; \
+		# Assurer l'unicité du name du champ group dans ce fichier \
+		unique_group_field_name="$$group_field_name"; \
+		u_idx=2; \
+		while grep -q "'name' => '$$unique_group_field_name'" "$$acf_file" 2>/dev/null; do \
+			unique_group_field_name="$${group_field_name}_$${u_idx}"; \
+			u_idx=$$((u_idx + 1)); \
+		done; \
+		# Créer un fichier temporaire avec les nouveaux champs \
+		temp_file="/tmp/acf_$$component_name.$$(date +%s).php"; \
+		case "$$component_name" in \
+			"titre-texte") \
+				base_key=$$(date +%s); \
+				if [ -f "$$spec_file" ]; then \
+					# Génération dynamique depuis annotations du Blade \
+					printf "array(\n\t\t\t'key' => '$$unique_group_field_name',\n\t\t\t'label' => '$$group_title',\n\t\t\t'name' => '$$unique_group_field_name',\n\t\t\t'type' => 'group',\n\t\t\t'layout' => 'block',\n\t\t\t'sub_fields' => array(\n" > "$$temp_file"; \
+					inc=1; \
+					while IFS= read -r line; do \
+						parsed=$$(printf "%s\n" "$$line" | sed -n -E "s/^[[:space:]]*\\/\\/\\s*([^:]+)\\s*:\\s*(.+)\\s*$$/\\1|\\2/p; s/^[[:space:]]*\\{\\{--\\s*([^:]+)\\s*:\\s*(.+)\\s*--\\}\\}$$/\\1|\\2/p"); \
+						[ -z "$$parsed" ] && continue; \
+						label=$$(printf "%s" "$$parsed" | cut -d'|' -f1 | sed -E 's/^\s+|\s+$$//g'); \
+						name=$$(printf "%s" "$$label" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_]+/_/g'); \
+						rawtype=$$(printf "%s" "$$parsed" | cut -d'|' -f2 | tr '[:upper:]' '[:lower:]'); \
+						case "$$rawtype" in \
+							*wysi*|*editeur*) acf_type="wysiwyg" ;; \
+							*texte-court*|*text*) acf_type="text" ;; \
+							*textarea*|*texte-long*) acf_type="textarea" ;; \
+							*image*) acf_type="image" ;; \
+							*url*) acf_type="url" ;; \
+							*) acf_type="text" ;; \
+						esac; \
+						printf "\t\t\t\tarray(\n\t\t\t\t\t'key' => 'field_$$(($$base_key + $$inc))',\n\t\t\t\t\t'label' => '%s',\n\t\t\t\t\t'name' => '%s',\n\t\t\t\t\t'aria-label' => '',\n\t\t\t\t\t'type' => '%s',\n\t\t\t\t\t'instructions' => '',\n\t\t\t\t\t'required' => 0,\n\t\t\t\t\t'conditional_logic' => 0,\n\t\t\t\t\t'wrapper' => array(\n\t\t\t\t\t\t'width' => '',\n\t\t\t\t\t\t'class' => '',\n\t\t\t\t\t\t'id' => '',\n\t\t\t\t\t),\n\t\t\t\t),\n" "$$label" "$$name" "$$acf_type" >> "$$temp_file"; \
+						inc=$$((inc + 1)); \
+					done < "$$spec_file"; \
+					printf "\t\t\t),\n\t\t)," >> "$$temp_file"; \
+				else \
+					printf "array(\n\t\t\t'key' => 'field_$${base_key}',\n\t\t\t'label' => '$$group_title',\n\t\t\t'name' => '$$unique_group_field_name',\n\t\t\t'type' => 'group',\n\t\t\t'layout' => 'block',\n\t\t\t'sub_fields' => array(\n\t\t\t\tarray(\n\t\t\t\t\t'key' => 'field_$$((base_key + 1))',\n\t\t\t\t\t'label' => 'Titre',\n\t\t\t\t\t'name' => 'titre',\n\t\t\t\t\t'aria-label' => '',\n\t\t\t\t\t'type' => 'text',\n\t\t\t\t\t'instructions' => '',\n\t\t\t\t\t'required' => 0,\n\t\t\t\t\t'conditional_logic' => 0,\n\t\t\t\t\t'wrapper' => array(\n\t\t\t\t\t\t'width' => '',\n\t\t\t\t\t\t'class' => '',\n\t\t\t\t\t\t'id' => '',\n\t\t\t\t\t),\n\t\t\t\t\t'default_value' => 'Lorem ipsum dolor sit amet',\n\t\t\t\t\t'maxlength' => '',\n\t\t\t\t\t'placeholder' => '',\n\t\t\t\t\t'prepend' => '',\n\t\t\t\t\t'append' => '',\n\t\t\t\t),\n\t\t\t\tarray(\n\t\t\t\t\t'key' => 'field_$$((base_key + 2))',\n\t\t\t\t\t'label' => 'Texte',\n\t\t\t\t\t'name' => 'texte',\n\t\t\t\t\t'aria-label' => '',\n\t\t\t\t\t'type' => 'textarea',\n\t\t\t\t\t'instructions' => '',\n\t\t\t\t\t'required' => 0,\n\t\t\t\t\t'conditional_logic' => 0,\n\t\t\t\t\t'wrapper' => array(\n\t\t\t\t\t\t'width' => '',\n\t\t\t\t\t\t'class' => '',\n\t\t\t\t\t\t'id' => '',\n\t\t\t\t\t),\n\t\t\t\t\t'default_value' => 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',\n\t\t\t\t\t'maxlength' => '',\n\t\t\t\t\t'placeholder' => '',\n\t\t\t\t\t'rows' => '',\n\t\t\t\t\t'new_lines' => '',\n\t\t\t\t),\n\t\t\t),\n\t\t)," > "$$temp_file"; \
+				fi; \
+				;; \
+			"image-texte-bouton") \
+				base_key=$$(date +%s); \
+				if [ -f "$$spec_file" ]; then \
+					printf "array(\n\t\t\t'key' => '$$unique_group_field_name',\n\t\t\t'label' => '$$group_title',\n\t\t\t'name' => '$$unique_group_field_name',\n\t\t\t'type' => 'group',\n\t\t\t'layout' => 'block',\n\t\t\t'sub_fields' => array(\n" > "$$temp_file"; \
+					inc=1; \
+					while IFS= read -r line; do \
+						parsed=$$(printf "%s\n" "$$line" | sed -n -E "s/^[[:space:]]*\\/\\/\\s*([^:]+)\\s*:\\s*(.+)\\s*$$/\\1|\\2/p; s/^[[:space:]]*\\{\\{--\\s*([^:]+)\\s*:\\s*(.+)\\s*--\\}\\}$$/\\1|\\2/p"); \
+						[ -z "$$parsed" ] && continue; \
+						label=$$(printf "%s" "$$parsed" | cut -d'|' -f1 | sed -E 's/^\s+|\s+$$//g'); \
+						name=$$(printf "%s" "$$label" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_]+/_/g'); \
+						rawtype=$$(printf "%s" "$$parsed" | cut -d'|' -f2 | tr '[:upper:]' '[:lower:]'); \
+						case "$$rawtype" in \
+							*wysi*|*editeur*) acf_type="wysiwyg" ;; \
+							*text*) acf_type="text" ;; \
+							*textarea*|*texte-long*) acf_type="textarea" ;; \
+							*image*) acf_type="image" ;; \
+							*url*) acf_type="url" ;; \
+							*) acf_type="text" ;; \
+						esac; \
+						printf "\t\t\t\tarray(\n\t\t\t\t\t'key' => 'field_$$(($$base_key + $$inc))',\n\t\t\t\t\t'label' => '%s',\n\t\t\t\t\t'name' => '%s',\n\t\t\t\t\t'aria-label' => '',\n\t\t\t\t\t'type' => '%s',\n\t\t\t\t\t'instructions' => '',\n\t\t\t\t\t'required' => 0,\n\t\t\t\t\t'conditional_logic' => 0,\n\t\t\t\t\t'wrapper' => array(\n\t\t\t\t\t\t'width' => '',\n\t\t\t\t\t\t'class' => '',\n\t\t\t\t\t\t'id' => '',\n\t\t\t\t\t),\n\t\t\t\t),\n" "$$label" "$$name" "$$acf_type" >> "$$temp_file"; \
+						inc=$$((inc + 1)); \
+					done < "$$spec_file"; \
+					printf "\t\t\t),\n\t\t)," >> "$$temp_file"; \
+				else \
+					printf "array(\n\t\t\t'key' => 'field_$${base_key}',\n\t\t\t'label' => '$$group_title',\n\t\t\t'name' => '$$unique_group_field_name',\n\t\t\t'type' => 'group',\n\t\t\t'layout' => 'block',\n\t\t\t'sub_fields' => array(\n\t\t\t\tarray(\n\t\t\t\t\t'key' => 'field_$$((base_key + 1))',\n\t\t\t\t\t'label' => 'Image',\n\t\t\t\t\t'name' => 'image',\n\t\t\t\t\t'aria-label' => '',\n\t\t\t\t\t'type' => 'image',\n\t\t\t\t\t'instructions' => '',\n\t\t\t\t\t'required' => 0,\n\t\t\t\t\t'conditional_logic' => 0,\n\t\t\t\t\t'wrapper' => array(\n\t\t\t\t\t\t'width' => '',\n\t\t\t\t\t\t'class' => '',\n\t\t\t\t\t\t'id' => '',\n\t\t\t\t\t),\n\t\t\t\t\t'return_format' => 'array',\n\t\t\t\t),\n\t\t\t\tarray(\n\t\t\t\t\t'key' => 'field_$$((base_key + 2))',\n\t\t\t\t\t'label' => 'Texte',\n\t\t\t\t\t'name' => 'texte',\n\t\t\t\t\t'aria-label' => '',\n\t\t\t\t\t'type' => 'textarea',\n\t\t\t\t\t'instructions' => '',\n\t\t\t\t\t'required' => 0,\n\t\t\t\t\t'conditional_logic' => 0,\n\t\t\t\t\t'wrapper' => array(\n\t\t\t\t\t\t'width' => '',\n\t\t\t\t\t\t'class' => '',\n\t\t\t\t\t\t'id' => '',\n\t\t\t\t\t),\n\t\t\t\t\t'default_value' => 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',\n\t\t\t\t\t'maxlength' => '',\n\t\t\t\t\t'placeholder' => '',\n\t\t\t\t\t'rows' => '',\n\t\t\t\t\t'new_lines' => '',\n\t\t\t\t),\n\t\t\t\tarray(\n\t\t\t\t\t'key' => 'field_$$((base_key + 3))',\n\t\t\t\t\t'label' => 'Texte du bouton',\n\t\t\t\t\t'name' => 'texte_bouton',\n\t\t\t\t\t'aria-label' => '',\n\t\t\t\t\t'type' => 'text',\n\t\t\t\t\t'instructions' => '',\n\t\t\t\t\t'required' => 0,\n\t\t\t\t\t'conditional_logic' => 0,\n\t\t\t\t\t'wrapper' => array(\n\t\t\t\t\t\t'width' => '',\n\t\t\t\t\t\t'class' => '',\n\t\t\t\t\t\t'id' => '',\n\t\t\t\t\t),\n\t\t\t\t\t'default_value' => 'En savoir plus',\n\t\t\t\t\t'maxlength' => '',\n\t\t\t\t\t'placeholder' => '',\n\t\t\t\t\t'prepend' => '',\n\t\t\t\t\t'append' => '',\n\t\t\t\t),\n\t\t\t\tarray(\n\t\t\t\t\t'key' => 'field_$$((base_key + 4))',\n\t\t\t\t\t'label' => 'Lien du bouton',\n\t\t\t\t\t'name' => 'lien_bouton',\n\t\t\t\t\t'aria-label' => '',\n\t\t\t\t\t'type' => 'url',\n\t\t\t\t\t'instructions' => '',\n\t\t\t\t\t'required' => 0,\n\t\t\t\t\t'conditional_logic' => 0,\n\t\t\t\t\t'wrapper' => array(\n\t\t\t\t\t\t'width' => '',\n\t\t\t\t\t\t'class' => '',\n\t\t\t\t\t\t'id' => '',\n\t\t\t\t\t),\n\t\t\t\t\t'default_value' => '#',\n\t\t\t\t\t'placeholder' => '',\n\t\t\t\t),\n\t\t\t),\n\t\t)," > "$$temp_file"; \
+				fi; \
+				;; \
+		esac; \
+		# Conserver la syntaxe array(...) comme dans l'exemple souhaité \
+		# Insérer le groupe dans $(THEME)/app/acf/$$page_slug.php via PHP (entre 'fields' et 'location') \
+		php_script="/tmp/insert_acf_$$RANDOM.php"; \
+		cat > "$$php_script" <<-'PHP'
+		<?php
+		$$file = $$argv[1];
+		$$addFile = $$argv[2];
+		$$code = file_get_contents($$file);
+		$$addition = rtrim(file_get_contents($$addFile));
+		// Gérer 'fields' => array(...) ou 'fields' => [...] et insérer avant 'location'
+		$$pattern = "/('fields'\\s*=>\\s*(?:array\\(|\\[))(.*?)(?:\)\\s*,\\s*\\n\\s*'location'|\\]\\s*,\\s*\\n\\s*'location')/s";
+		$$replaced = preg_replace_callback($$pattern, function ($$m) use ($$addition) {
+			$$inside = rtrim($$m[2]);
+			if ($$inside !== '' && substr(rtrim($$inside), -1) !== ',') {
+				$$inside .= ",\n";
+			}
+			// Reconstruire proprement: $$m[0] commence après l'ouverture et s'arrête juste avant location; on doit réintroduire la fermeture correspondante
+			$$opening = $$m[1];
+			$$closing = (strpos($$opening, 'array(') !== false) ? ")\n" : "]\n";
+			// Ajouter la virgule avant 'location' pour une syntaxe valide
+			return $$opening . $$inside . $$addition . "\n" . $$closing . ",\n\t\t\t\t" . "'location'";
+		}, $$code, 1);
+		if ($$replaced === null) {
+			fwrite(STDERR, "preg_replace failed\n");
+			exit(2);
+		}
+		if ($$replaced === $$code) {
+			fwrite(STDERR, "no match for fields/location block\n");
+			exit(3);
+		}
+		file_put_contents($$file, $$replaced);
+		PHP
+		php "$$php_script" "$$acf_file" "$$temp_file"; status=$$?; \
+		rm -f "$$php_script" "$$temp_file"; \
+		if [ $$status -ne 0 ]; then echo "❌ Insertion ACF échouée"; exit $$status; fi; \
+		echo "✅ Champs ACF insérés dans $$acf_file"; \
+	else \
+		echo "⚠️  Fichier ACF non trouvé: $$acf_file"; \
+	fi; \
+	# (supprimé) Gestion SCSS — plus nécessaire, import automatique \
+	# Ajouter le composant dans le template Blade (doublons autorisés) \
+	blade_file="$(THEME)/resources/views/pages/$$page_slug.blade.php"; \
+	if [ -f "$$blade_file" ]; then \
+		echo "🧩 Ajout du composant dans le template Blade..."; \
+		case "$$component_name" in \
+			"titre-texte") \
+				sed -i "/^@endsection/i\\  @include('components.titre-texte', ['composant_data' => get_field('$$unique_group_field_name')])\n" "$$blade_file"; \
+				echo "✅ Composant ajouté au template Blade"; \
+				;; \
+			"image-texte-bouton") \
+				sed -i "/^@endsection/i\\  @include('components.image-texte-bouton', ['composant_data' => get_field('$$unique_group_field_name')])\n" "$$blade_file"; \
+				echo "✅ Composant ajouté au template Blade"; \
+				;; \
+		esac; \
+	else \
+		echo "⚠️  Fichier Blade non trouvé: $$blade_file"; \
+	fi; \
+		echo "🎉 Composant $$component_name ajouté à la page $$page_title !"
 
 branch: ### créer branch
 	$(eval name ?= branch)
