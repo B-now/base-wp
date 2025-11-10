@@ -9,11 +9,11 @@ ifneq (,$(wildcard .env))
 endif
 
 # Configuration ACF - version gratuite installée par défaut
-ADMIN_EMAIL ?= admin@localhost
+ADMIN_EMAIL ?= admin@example.com
 
 ## -------- SETUP PROJECT --------
 
-install-wp: check-env create-bedrock copy-env update-env generate-salts install-acf start-docker configure-wp install-contact-form update-translations install-theme seed-css theme-deps configure-vite activate-theme update-themes open-phpstorm
+install-wp: check-env create-bedrock copy-env update-env generate-salts install-acf start-docker configure-wp install-contact-form install-theme seed-css theme-deps configure-vite activate-theme update-themes update-translations open-phpstorm
 	@echo "🎉 Projet $(NAME) prêt !"
 
 check-env: ## Vérifie et crée le fichier .env si nécessaire

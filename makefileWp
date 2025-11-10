@@ -312,6 +312,8 @@ install-theme:
 	sed -i "s/disableTailwindFontSizes: false/disableTailwindFontSizes: true/" $(THEME)/vite.config.js
 	sed -i "s/app\.css/app.scss/" $(THEME)/resources/views/layouts/app.blade.php
 	sed -i "s/editor\.css/editor.scss/" $(THEME)/app/setup.php
+	# Ajouter @stack('vite-head') après @vite dans le layout pour permettre aux pages d'ajouter leurs assets
+	sed -i "/@vite.*app\.scss/a\    @stack('vite-head')" $(THEME)/resources/views/layouts/app.blade.php
 	@echo "🎨 Thème Sage installé avec Vite et SCSS prêt à compiler"
 	mkdir -p $(THEME)/resources/css/pages
 	mkdir -p $(THEME)/resources/css/utilities
