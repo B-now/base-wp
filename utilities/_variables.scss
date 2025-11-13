@@ -1,5 +1,6 @@
 @use "sass:color";
-//@use "./fonts";
+
+// @use "./fonts";
 
 :root {
   scroll-behavior: smooth;
@@ -13,7 +14,6 @@ $font-family-text: null !default;
 // Les couleurs
 $white: #fff !default;
 $dark: #000 !default;
-
 $primary: null !default;
 $primary-100: null !default;
 $primary-200: null !default;
@@ -25,7 +25,6 @@ $primary-700: null !default;
 $primary-800: null !default;
 $primary-900: null !default;
 $primary-10: null !default;
-
 $secondary: null !default;
 $secondary-100: null !default;
 $secondary-200: null !default;
@@ -33,7 +32,6 @@ $secondary-300: null !default;
 $secondary-400: null !default;
 $secondary-500: null !default;
 $secondary-10: null !default;
-
 $neutral-100: null !default;
 $neutral-200: null !default;
 $neutral-300: null !default;
@@ -44,13 +42,9 @@ $neutral-700: null !default;
 $neutral-800: null !default;
 $neutral-900: null !default;
 $neutral-10: null !default;
-
 $transparent: null !default;
-
 $main-color: null !default;
-
 $error: null !default;
-
 $alt-color: null !default;
 
 // texts
@@ -59,11 +53,9 @@ $text-dark: null !default;
 $text-primary: null !default;
 $text-secondary: null !default;
 $text-alt: null !default;
-
 $title-light: null !default;
 $title-dark: null !default;
 $title-alt: null !default;
-
 $background-light: null !default;
 $background-light-alt: null !default;
 $background-dark: null !default;
@@ -83,12 +75,8 @@ $btn-primary-border: null !default;
 $btn-primary-background: null !default;
 $btn-primary-background-hover: null !default;
 $btn-primary-text: null !default;
-
 $btn-secondary-border: null !default;
 $btn-secondary-background: null !default;
 $btn-secondary-background-hover: null !default;
 $btn-secondary-text: null !default;
-
-
-
  

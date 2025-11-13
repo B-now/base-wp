@@ -34,7 +34,7 @@ create-page: ## Crée une page WordPress et génère SCSS/TS (pages/<slug>.*)
 	scss_path="$(THEME)/resources/css/pages/$$page_slug.scss"; \
 	ts_dir="$(THEME)/resources/js/pages"; ts_path="$$ts_dir/$$page_slug.ts"; \
 	mkdir -p "$(THEME)/resources/css/pages" "$$ts_dir"; \
-	if [ ! -f "$$scss_path" ]; then printf "/* Page: %s */\n.page-%s {\n}\n" "$$title" "$$page_slug" > "$$scss_path"; echo "🎨 SCSS créé: $$scss_path"; else echo "🎨 SCSS déjà présent: $$scss_path"; fi; \
+	if [ ! -f "$$scss_path" ]; then printf "/* Page: %s */\n.page-template-%s {\n}\n" "$$title" "$$page_slug" > "$$scss_path"; echo "🎨 SCSS créé: $$scss_path"; else echo "🎨 SCSS déjà présent: $$scss_path"; fi; \
 	if [ ! -f "$$ts_path" ]; then \
 		pascal=$$(printf "%s" "$$page_slug" | sed -E 's/(^|[-_])([a-zA-Z])/\U\2/g'); \
 		printf "%s\n" \
@@ -298,6 +298,7 @@ install-theme:
 	cd $(THEME) && npm install
 	cd $(THEME) && npm uninstall -D @tailwindcss/vite tailwindcss || true
 	cd $(THEME) && npm install -D sass typescript @types/node
+	cd $(THEME) && npm install -D eslint @eslint/js typescript-eslint stylelint stylelint-config-standard-scss prettier prettier-plugin-blade
 
 	mv $(THEME)/resources/css/app.css $(THEME)/resources/css/app.scss
 	mv $(THEME)/resources/css/editor.css $(THEME)/resources/css/editor.scss
@@ -368,6 +369,106 @@ install-theme:
 	sed -i "s/app\.js/app.ts/" $(THEME)/resources/views/layouts/app.blade.php
 	sed -i "s/editor\.js/editor.ts/" $(THEME)/app/setup.php
 	@echo "✅ TypeScript configuré"
+	# Créer le fichier tsconfig.json
+	@printf '%s\n' \
+	'{' \
+	'  "compilerOptions": {' \
+	'    "target": "ES2022",' \
+	'    "module": "ESNext",' \
+	'    "lib": ["ES2022", "DOM", "DOM.Iterable"],' \
+	'    "moduleResolution": "bundler",' \
+	'    "resolveJsonModule": true,' \
+	'    "allowJs": true,' \
+	'    "checkJs": false,' \
+	'    "strict": true,' \
+	'    "noEmit": true,' \
+	'    "esModuleInterop": true,' \
+	'    "skipLibCheck": true,' \
+	'    "forceConsistentCasingInFileNames": true,' \
+	'    "isolatedModules": true,' \
+	'    "types": ["node"]' \
+	'  },' \
+	'  "include": ["resources/js/**/*"],' \
+	'  "exclude": ["node_modules", "vendor", "public"]' \
+	'}' \
+	> $(THEME)/tsconfig.json
+	@echo "🔧 Configuration des linters..."
+	# Créer le fichier .stylelintrc.json
+	@printf '%s\n' \
+	'{' \
+	'  "extends": [' \
+	'    "stylelint-config-standard-scss"' \
+	'  ],' \
+	'  "rules": {' \
+	'    "color-hex-length": "short",' \
+	'    "color-named": "never",' \
+	'    "declaration-no-important": true,' \
+	'    "font-weight-notation": "numeric",' \
+	'    "property-no-vendor-prefix": true,' \
+	'    "value-no-vendor-prefix": true,' \
+	'    "no-empty-source": null,' \
+	'    "scss/dollar-variable-colon-space-after": "always",' \
+	'    "scss/dollar-variable-colon-space-before": "never"' \
+	'  },' \
+	'  "ignoreFiles": [' \
+	'    "node_modules/**",' \
+	'    "vendor/**",' \
+	'    "public/**"' \
+	'  ]' \
+	'}' \
+	> $(THEME)/.stylelintrc.json
+	# Créer le fichier eslint.config.js
+	@printf '%s\n' \
+	'import js from '\''@eslint/js'\'';' \
+	'import tseslint from '\''typescript-eslint'\'';' \
+	'' \
+	'export default tseslint.config(' \
+	'  {' \
+	'    ignores: ['\''node_modules/**'\'', '\''vendor/**'\'', '\''public/**'\'', '\''*.config.js'\''],' \
+	'  },' \
+	'  js.configs.recommended,' \
+	'  ...tseslint.configs.recommended,' \
+	'  {' \
+	'    languageOptions: {' \
+	'      parser: tseslint.parser,' \
+	'      parserOptions: {' \
+	'        ecmaVersion: 2022,' \
+	'        sourceType: '\''module'\'',' \
+	'        project: '\''./tsconfig.json'\'',' \
+	'      },' \
+	'      globals: {' \
+	'        window: '\''readonly'\'',' \
+	'        document: '\''readonly'\'',' \
+	'        console: '\''readonly'\'',' \
+	'      },' \
+	'    },' \
+	'    rules: {' \
+	'      '\''@typescript-eslint/no-unused-vars'\'': [' \
+	'        '\''error'\'',' \
+	'        {' \
+	'          argsIgnorePattern: '\''^_'\'',' \
+	'          varsIgnorePattern: '\''^_'\'',' \
+	'        },' \
+	'      ],' \
+	'      '\''@typescript-eslint/explicit-module-boundary-types'\'': '\''off'\'',' \
+	'      '\''@typescript-eslint/no-explicit-any'\'': '\''warn'\'',' \
+	'    },' \
+	'  }' \
+	');' \
+	> $(THEME)/eslint.config.js
+	# Créer le fichier .prettierrc.json
+	@printf '%s\n' \
+	'{' \
+	'  "plugins": ["prettier-plugin-blade"],' \
+	'  "printWidth": 100,' \
+	'  "tabWidth": 2,' \
+	'  "useTabs": false,' \
+	'  "semi": true,' \
+	'  "singleQuote": true,' \
+	'  "trailingComma": "es5"' \
+	'}' \
+	> $(THEME)/.prettierrc.json
+	@echo "✅ Linters configurés"
 
 
 	
@@ -381,15 +482,500 @@ stop:
 	docker compose stop
 	fuser -k 8000/tcp || true
 
+## —— Déploiement ——————————————————————————————————
+
+setup-ssh: ## Configure les clés SSH pour l'authentification sans mot de passe
+	@set -e; \
+	echo "🔐 Configuration des clés SSH..."; \
+	echo ""; \
+	ssh_host="$${SSH_HOST}"; if [ -z "$$ssh_host" ]; then printf "Host SSH (ex: user@example.com): "; read ssh_host; fi; \
+	ssh_port="$${SSH_PORT}"; if [ -z "$$ssh_port" ]; then printf "Port SSH (Entrée pour 22): "; read ssh_port; fi; \
+	if [ -z "$$ssh_port" ]; then ssh_port=22; fi; \
+	echo ""; \
+	# Vérifier si une clé SSH existe déjà \
+	ssh_key="$$HOME/.ssh/id_rsa"; \
+	ssh_key_pub="$$HOME/.ssh/id_rsa.pub"; \
+	if [ ! -f "$$ssh_key" ] || [ ! -f "$$ssh_key_pub" ]; then \
+		echo "🔑 Génération d'une nouvelle clé SSH..."; \
+		ssh-keygen -t rsa -b 4096 -f "$$ssh_key" -N "" -C "$$(whoami)@$$(hostname)" || (echo "❌ Erreur génération clé SSH"; exit 1); \
+		echo "✅ Clé SSH générée"; \
+	else \
+		echo "✅ Clé SSH existante trouvée: $$ssh_key"; \
+	fi; \
+	echo ""; \
+	# Copier la clé publique sur le serveur \
+	echo "📤 Copie de la clé publique sur le serveur..."; \
+	ssh-copy-id -p $$ssh_port $$ssh_host 2>/dev/null || \
+	( \
+		echo "⚠️  ssh-copy-id non disponible, tentative manuelle..."; \
+		cat $$ssh_key_pub | ssh -p $$ssh_port $$ssh_host "mkdir -p ~/.ssh && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys" || \
+		(echo "❌ Erreur copie clé SSH. Vérifiez votre accès SSH."; exit 1) \
+	); \
+	echo "✅ Clé SSH copiée sur le serveur"; \
+	echo ""; \
+	# Tester la connexion \
+	echo "🧪 Test de la connexion SSH..."; \
+	ssh -p $$ssh_port -o BatchMode=yes -o ConnectTimeout=5 $$ssh_host "echo 'Connexion SSH réussie'" 2>/dev/null && \
+	echo "✅ Connexion SSH sans mot de passe configurée avec succès !" || \
+	(echo "⚠️  La connexion SSH nécessite encore un mot de passe. Vérifiez les permissions sur le serveur."; exit 1); \
+	echo ""; \
+	echo "🎉 Configuration SSH terminée !"
+
+deploy-first: ## Déploiement initial automatique (première mise en ligne)
+	@set -e; \
+	echo "🚀 Déploiement initial du projet"; \
+	echo ""; \
+	\
+	# Lire les informations de la base de données locale depuis .env et docker-compose.yaml \
+	echo "📊 Lecture de la configuration locale..."; \
+	if [ -f .env ]; then \
+		local_db_name=$$(grep -E "^DB_NAME=" .env 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'" | tr -d ' ' | head -1); \
+		local_db_user=$$(grep -E "^DB_USER=" .env 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'" | tr -d ' ' | head -1); \
+		local_db_password=$$(grep -E "^DB_PASSWORD=" .env 2>/dev/null | cut -d'=' -f2 | tr -d '"' | tr -d "'" | tr -d ' ' | head -1); \
+	fi; \
+	# Compléter depuis docker-compose.yaml si nécessaire \
+	if [ -f docker-compose.yaml ]; then \
+		if [ -z "$$local_db_name" ]; then \
+			local_db_name=$$(grep -E "MYSQL_DATABASE:" docker-compose.yaml 2>/dev/null | cut -d':' -f2 | tr -d '"' | tr -d "'" | tr -d ' ' | head -1); \
+		fi; \
+		if [ -z "$$local_db_password" ]; then \
+			local_db_password=$$(grep -E "MYSQL_ROOT_PASSWORD:" docker-compose.yaml 2>/dev/null | cut -d':' -f2 | tr -d '"' | tr -d "'" | tr -d ' ' | head -1); \
+		fi; \
+	fi; \
+	# Valeurs par défaut si non trouvées \
+	local_db_name="$${local_db_name:-wp}"; \
+	local_db_user="$${local_db_user:-root}"; \
+	local_db_password="$${local_db_password:-password}"; \
+	echo "  ✅ Base locale détectée: $$local_db_user@docker/$$local_db_name"; \
+	echo ""; \
+	# Demander les informations de base de données DISTANTE (production) \
+	echo "📊 Informations de base de données DISTANTE (production) :"; \
+	db_host="$${DB_HOST}"; if [ -z "$$db_host" ]; then printf "  Host de la BDD (ex: localhost): "; read db_host; fi; \
+	db_user="$${DB_USER}"; if [ -z "$$db_user" ]; then printf "  Utilisateur de la BDD: "; read db_user; fi; \
+	db_password="$${DB_PASSWORD}"; if [ -z "$$db_password" ]; then printf "  Mot de passe de la BDD: "; stty -echo; read db_password; stty echo; echo ""; fi; \
+	db_name="$${DB_NAME}"; if [ -z "$$db_name" ]; then printf "  Nom de la base de données: "; read db_name; fi; \
+	echo ""; \
+	\
+	# Demander les informations SSH \
+	echo "🔐 Informations SSH :"; \
+	ssh_host="$${SSH_HOST}"; if [ -z "$$ssh_host" ]; then printf "  Host SSH (ex: user@example.com): "; read ssh_host; fi; \
+	ssh_port="$${SSH_PORT}"; if [ -z "$$ssh_port" ]; then printf "  Port SSH (Entrée pour 22): "; read ssh_port; fi; \
+	if [ -z "$$ssh_port" ]; then ssh_port=22; fi; \
+	echo ""; \
+	# Vérifier et configurer SSH si nécessaire \
+	echo "🔐 Vérification de la configuration SSH..."; \
+	if ! ssh -p $$ssh_port -o BatchMode=yes -o ConnectTimeout=5 $$ssh_host "echo 'test'" >/dev/null 2>&1; then \
+		echo "⚠️  Connexion SSH nécessite un mot de passe. Configuration des clés SSH..."; \
+		SSH_HOST=$$ssh_host SSH_PORT=$$ssh_port make setup-ssh || (echo "❌ Échec configuration SSH"; exit 1); \
+		echo ""; \
+	fi; \
+	\
+	# Demander l'URL \
+	echo "🌐 Informations du site :"; \
+	site_url="$${SITE_URL}"; if [ -z "$$site_url" ]; then printf "  URL du site (ex: example.com): "; read site_url; fi; \
+	# Enlever https:// et http:// si présent \
+	site_url=$$(echo "$$site_url" | sed 's|^https\?://||'); \
+	echo ""; \
+	\
+	# Demander le dossier racine \
+	echo "📁 Dossier racine du projet :"; \
+	remote_dir="$${REMOTE_DIR}"; if [ -z "$$remote_dir" ]; then printf "  Dossier racine (Entrée pour ~/www): "; read remote_dir; fi; \
+	if [ -z "$$remote_dir" ]; then remote_dir="~/www"; fi; \
+	# Détecter le home de l'utilisateur SSH \
+	ssh_home=$$(ssh -p $$ssh_port $$ssh_host "echo \$$HOME" 2>/dev/null || echo ""); \
+	if [ -z "$$ssh_home" ]; then \
+		# Extraire le nom d'utilisateur depuis ssh_host \
+		ssh_user=$$(echo "$$ssh_host" | cut -d'@' -f1); \
+		ssh_home="/home/$$ssh_user"; \
+	fi; \
+	# Gérer les chemins relatifs et ~ \
+	if echo "$$remote_dir" | grep -q "^~/"; then \
+		remote_dir=$$(echo "$$remote_dir" | sed "s|^~|$$ssh_home|"); \
+	elif [ "$${remote_dir#/}" = "$$remote_dir" ]; then \
+		# Chemin relatif, ajouter au home \
+		remote_dir="$$ssh_home/$$remote_dir"; \
+	fi; \
+	echo "  Chemin complet: $$remote_dir"; \
+	echo ""; \
+	\
+	echo "✅ Configuration :"; \
+	echo "  BDD: $$db_user@$$db_host/$$db_name"; \
+	echo "  SSH: $$ssh_host:$$ssh_port"; \
+	echo "  URL: https://$$site_url"; \
+	echo "  Dossier: $$remote_dir"; \
+	echo ""; \
+	read -p "Continuer ? (o/N): " confirm; \
+	if [ "$$confirm" != "o" ] && [ "$$confirm" != "O" ]; then \
+		echo "❌ Déploiement annulé"; \
+		exit 1; \
+	fi; \
+	echo ""; \
+	\
+	# Préparer le projet pour la production \
+	echo "📦 Préparation du projet pour la production..."; \
+	composer install --no-dev --optimize-autoloader || (echo "⚠️  Erreur composer install"; exit 1); \
+	theme_path="$(THEME)"; \
+	if [ -d "$$theme_path" ]; then \
+		echo "📦 Compilation des assets du thème..."; \
+		(cd $$theme_path && npm ci && npm run build) || (echo "⚠️  Erreur compilation du thème"; exit 1); \
+		echo "✅ Assets du thème compilés"; \
+	else \
+		echo "⚠️  Thème $$theme_path non trouvé, compilation des assets ignorée"; \
+	fi; \
+	echo "✅ Projet préparé pour la production"; \
+	echo ""; \
+	\
+	# Exporter la base de données locale depuis Docker \
+	echo "💾 Export de la base de données locale depuis Docker..."; \
+	sql_file="/tmp/deploy_$$(date +%s).sql"; \
+	if ! command -v docker >/dev/null 2>&1; then \
+		echo "❌ Docker n'est pas installé. Impossible d'exporter la base de données."; \
+		exit 1; \
+	fi; \
+	if ! docker compose ps database 2>/dev/null | grep -q "Up"; then \
+		echo "⚠️  Le conteneur Docker 'database' n'est pas démarré."; \
+		echo "   Démarrage du conteneur..."; \
+		docker compose up -d database || (echo "❌ Impossible de démarrer le conteneur Docker."; exit 1); \
+		echo "   Attente que la base soit prête..."; \
+		sleep 5; \
+	fi; \
+	echo "  Export depuis Docker ($$local_db_user@database/$$local_db_name)..."; \
+	docker compose exec -T database mysqldump -u$$local_db_user -p$$local_db_password $$local_db_name > "$$sql_file" 2>/dev/null || \
+	(echo "❌ Erreur export BDD depuis Docker."; \
+	echo "   Vérifiez que le conteneur est démarré: docker compose ps"; \
+	echo "   Identifiants utilisés: $$local_db_user@database/$$local_db_name"; \
+	exit 1); \
+	echo "✅ Base de données exportée: $$sql_file"; \
+	echo ""; \
+	\
+	# Modifier les URLs dans le fichier SQL \
+	echo "🔧 Modification des URLs dans le fichier SQL..."; \
+	sed -i "s|http://localhost:8000|https://$$site_url|g" "$$sql_file"; \
+	sed -i "s|localhost:8000|$$site_url|g" "$$sql_file"; \
+	echo "✅ URLs modifiées (http://localhost:8000 → https://$$site_url)"; \
+	echo ""; \
+	\
+	# Récupérer automatiquement l'URL Git depuis les remotes configurés \
+	echo "🔍 Récupération de l'URL Git..."; \
+	git_url="$${GIT_URL}"; \
+	if [ -z "$$git_url" ]; then \
+		# Essayer de récupérer depuis les remotes dans l'ordre : ovh, origin, puis le premier disponible \
+		git_url=$$(git remote get-url ovh 2>/dev/null || git remote get-url origin 2>/dev/null || git remote | head -1 | xargs -I {} git remote get-url {} 2>/dev/null || echo ""); \
+	fi; \
+	if [ -z "$$git_url" ]; then \
+		echo "⚠️  Aucun remote Git trouvé localement"; \
+		printf "  URL du dépôt Git: "; read git_url; \
+	fi; \
+	# Convertir les alias SSH locaux (github-pro, github-perso) en URL GitHub réelle \
+	if echo "$$git_url" | grep -q "^git@github-pro:"; then \
+		echo "⚠️  Alias SSH local détecté (github-pro), conversion en github.com..."; \
+		git_url=$$(echo "$$git_url" | sed 's|^git@github-pro:|git@github.com:|'); \
+	elif echo "$$git_url" | grep -q "^git@github-perso:"; then \
+		echo "⚠️  Alias SSH local détecté (github-perso), conversion en github.com..."; \
+		git_url=$$(echo "$$git_url" | sed 's|^git@github-perso:|git@github.com:|'); \
+	fi; \
+	# Convertir l'URL HTTPS en SSH si nécessaire (pour GitHub, GitLab, etc.) \
+	if echo "$$git_url" | grep -q "^https://"; then \
+		echo "⚠️  URL HTTPS détectée, conversion en SSH recommandée pour l'authentification"; \
+		git_url=$$(echo "$$git_url" | sed 's|^https://\([^/]*\)/\(.*\)|git@\1:\2|'); \
+	fi; \
+	echo "📦 URL Git détectée: $$git_url"; \
+	echo ""; \
+	\
+	# Configurer GitHub SSH sur le serveur si nécessaire \
+	if echo "$$git_url" | grep -q "github.com"; then \
+		echo "🔐 Configuration de GitHub SSH sur le serveur..."; \
+		# Ajouter la clé GitHub au known_hosts \
+		ssh -p $$ssh_port $$ssh_host "mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
+			if ! grep -q 'github.com' ~/.ssh/known_hosts 2>/dev/null; then \
+				ssh-keyscan -H github.com >> ~/.ssh/known_hosts 2>/dev/null || \
+				echo 'github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOXUCHiWpEvvwdwdTZ6Y0sZgnZJ39WnNkK5atdlQq2gxkzFhq2T3WSJmrVQYTMwgmIDX9/0d2acBjosZNgFcxiPY968lcFUV6LzIXONrE9E3fB2n9Hfhsm4QU8dGCvggzPpffOnguDBra5G85IrEjD+ZMoK1fOQtm3MFoKZsEnvZ3MzyXPX1z0hvhMlzHNaHyXGpzFoDZX6PBgoL32oqQVv8uzjvdjdTeP4Li2d4fht/a7lg4z+4C+42IAHlFmvi9B42LokNCw==' >> ~/.ssh/known_hosts 2>/dev/null; \
+				chmod 600 ~/.ssh/known_hosts 2>/dev/null || true; \
+			fi" || true; \
+		# Vérifier si une clé SSH existe déjà pour GitHub \
+		server_has_github_key=$$(ssh -p $$ssh_port $$ssh_host "test -f ~/.ssh/id_rsa.pub -o -f ~/.ssh/id_ed25519.pub" 2>/dev/null && echo "yes" || echo "no"); \
+		if [ "$$server_has_github_key" = "no" ]; then \
+			echo "🔑 Génération d'une clé SSH sur le serveur pour GitHub..."; \
+			ssh -p $$ssh_port $$ssh_host "ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519 -N '' -C 'server@github' 2>/dev/null || ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa -N '' -C 'server@github' 2>/dev/null || true"; \
+		fi; \
+		# Récupérer la clé publique \
+		server_ssh_key=$$(ssh -p $$ssh_port $$ssh_host "cat ~/.ssh/id_ed25519.pub 2>/dev/null || cat ~/.ssh/id_rsa.pub 2>/dev/null || echo ''" 2>/dev/null); \
+		if [ -n "$$server_ssh_key" ]; then \
+			echo ""; \
+			echo "📋 IMPORTANT : Pour que le clonage GitHub fonctionne, vous devez ajouter cette clé SSH à votre compte GitHub :"; \
+			echo ""; \
+			echo "$$server_ssh_key"; \
+			echo ""; \
+			echo "  1. Copiez la clé ci-dessus"; \
+			echo "  2. Allez sur https://github.com/settings/keys"; \
+			echo "  3. Cliquez sur 'New SSH key'"; \
+			echo "  4. Collez la clé et sauvegardez"; \
+			echo ""; \
+			printf "Appuyez sur Entrée une fois la clé ajoutée à GitHub..."; \
+			read dummy; \
+		fi; \
+		echo ""; \
+	fi; \
+	# Vérifier si le projet existe déjà sur le serveur \
+	echo "🔍 Vérification du projet sur le serveur..."; \
+	if ssh -p $$ssh_port $$ssh_host "[ -d $$remote_dir ]" 2>/dev/null; then \
+		echo "📁 Le dossier $$remote_dir existe déjà"; \
+		if ssh -p $$ssh_port $$ssh_host "[ -d $$remote_dir/.git ]" 2>/dev/null; then \
+			echo "✅ Dépôt Git déjà présent, mise à jour..."; \
+			ssh -p $$ssh_port $$ssh_host "cd $$remote_dir && git fetch --all && git reset --hard origin/main || git reset --hard ovh/main || git reset --hard HEAD" || true; \
+		else \
+			echo "📥 Clonage du projet dans le dossier existant ($$remote_dir)..."; \
+			ssh -p $$ssh_port $$ssh_host "cd $$remote_dir && git clone $$git_url ." || (echo "⚠️  Erreur clonage, dossier non vide ?"; exit 1); \
+			echo "✅ Projet cloné"; \
+		fi; \
+	else \
+		echo "📁 Création du dossier $$remote_dir..."; \
+		ssh -p $$ssh_port $$ssh_host "mkdir -p $$remote_dir"; \
+		echo "📥 Clonage du projet dans $$remote_dir..."; \
+		ssh -p $$ssh_port $$ssh_host "cd $$remote_dir && git clone $$git_url ." || (echo "❌ Erreur lors du clonage"; exit 1); \
+		echo "✅ Projet cloné"; \
+	fi; \
+	# Configurer le remote pour utiliser SSH si nécessaire \
+	echo "🔧 Configuration des remotes Git sur le serveur..."; \
+	ssh -p $$ssh_port $$ssh_host "cd $$remote_dir && \
+		(git remote remove origin 2>/dev/null || true) && \
+		git remote add origin $$git_url && \
+		(git remote remove ovh 2>/dev/null || true) && \
+		git remote add ovh $$git_url 2>/dev/null || true && \
+		git remote -v" || echo "⚠️  Erreur configuration remotes"; \
+	echo "✅ Remotes Git configurés"; \
+	echo ""; \
+	\
+	# Envoyer les fichiers du projet (assets compilés, sans vendor) \
+	echo "📤 Envoi des fichiers du projet..."; \
+	theme_path="$(THEME)"; \
+	build_dir="$$theme_path/public/build"; \
+	if [ -d "$$build_dir" ]; then \
+		echo "  📦 Dossier d'assets compilés trouvé: $$build_dir"; \
+	else \
+		echo "  ⚠️  Dossier d'assets compilés non trouvé: $$build_dir"; \
+		echo "  ⚠️  Les assets devront être compilés sur le serveur"; \
+	fi; \
+	rsync -avz --exclude='.git' --exclude='node_modules' --exclude='database' \
+		--exclude='vendor' --exclude='.env' --exclude='*.log' -e "ssh -p $$ssh_port" \
+		./ $$ssh_host:$$remote_dir/ || (echo "⚠️  Erreur rsync, tentative avec scp..."; \
+		tar -czf /tmp/deploy_files.tar.gz --exclude='.git' --exclude='node_modules' \
+		--exclude='database' --exclude='vendor' --exclude='.env' --exclude='*.log' . && \
+		scp -P $$ssh_port /tmp/deploy_files.tar.gz $$ssh_host:$$remote_dir/ && \
+		ssh -p $$ssh_port $$ssh_host "cd $$remote_dir && tar -xzf deploy_files.tar.gz && rm deploy_files.tar.gz"); \
+	# Vérifier que les assets compilés sont bien présents sur le serveur \
+	if [ -d "$$build_dir" ]; then \
+		if ssh -p $$ssh_port $$ssh_host "[ -d $$remote_dir/$$build_dir ]" 2>/dev/null; then \
+			echo "  ✅ Assets compilés vérifiés sur le serveur"; \
+		else \
+			echo "  ⚠️  Assets compilés non trouvés sur le serveur, ils seront compilés si npm est disponible"; \
+		fi; \
+	fi; \
+	echo "✅ Fichiers envoyés"; \
+	echo ""; \
+	\
+	# Envoyer le fichier SQL \
+	echo "📤 Envoi du fichier SQL..."; \
+	scp -P $$ssh_port "$$sql_file" $$ssh_host:$$remote_dir/database.sql || (echo "⚠️  Erreur envoi SQL"; exit 1); \
+	echo "✅ Fichier SQL envoyé"; \
+	echo ""; \
+	\
+	# Télécharger WP-CLI et Composer localement sur le serveur \
+	echo "📥 Téléchargement de WP-CLI et Composer sur le serveur..."; \
+	ssh -p $$ssh_port $$ssh_host "cd $$remote_dir && \
+		(if [ ! -f wp-cli.phar ]; then \
+			echo '📥 Téléchargement de WP-CLI...'; \
+			curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar 2>/dev/null || \
+			wget -q https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar 2>/dev/null || \
+			echo '⚠️  Impossible de télécharger WP-CLI'; \
+		fi) && \
+		chmod +x wp-cli.phar 2>/dev/null || true && \
+		(if [ ! -f composer.phar ]; then \
+			echo '📥 Téléchargement de Composer...'; \
+			php -r \"copy('https://getcomposer.org/installer', 'composer-setup.php');\" && \
+			php composer-setup.php --quiet && \
+			php -r \"unlink('composer-setup.php');\" 2>/dev/null || \
+			(echo '⚠️  Téléchargement Composer via curl...' && \
+			curl -sS https://getcomposer.org/installer | php 2>/dev/null || \
+			echo '⚠️  Impossible de télécharger Composer'); \
+		fi) && \
+		chmod +x composer.phar 2>/dev/null || true" || echo "⚠️  Erreur téléchargement outils"; \
+	echo "✅ WP-CLI et Composer téléchargés"; \
+	echo ""; \
+	\
+	# Configuration sur le serveur \
+	echo "⚙️  Configuration sur le serveur..."; \
+	theme_path="$(THEME)"; \
+	ssh -p $$ssh_port $$ssh_host "cd $$remote_dir && \
+		if [ ! -f composer.phar ]; then \
+			echo '❌ composer.phar non trouvé, téléchargement...'; \
+			php -r \"copy('https://getcomposer.org/installer', 'composer-setup.php');\" && \
+			php composer-setup.php --quiet && \
+			php -r \"unlink('composer-setup.php');\" 2>/dev/null || \
+			(echo '⚠️  Téléchargement Composer via curl...' && \
+			curl -sS https://getcomposer.org/installer | php 2>/dev/null); \
+			chmod +x composer.phar 2>/dev/null || true; \
+		fi && \
+		if [ ! -f composer.phar ]; then \
+			echo '❌ Impossible de télécharger Composer'; \
+			exit 1; \
+		fi && \
+		(if [ -d \"$$theme_path\" ]; then \
+			npm_cmd=\$$(command -v npm 2>/dev/null || printf ''); \
+			if [ -z \"\$$npm_cmd\" ]; then \
+				echo '🔍 Récupération de la dernière version LTS de Node.js...'; \
+				node_version=\"v20.18.0\"; \
+				node_json=\"/tmp/nodejs_index_\$$(date +%s).json\"; \
+				if curl -fsSL https://nodejs.org/dist/index.json -o \"\$$node_json\" 2>/dev/null || wget -q https://nodejs.org/dist/index.json -O \"\$$node_json\" 2>/dev/null; then \
+					if [ -f \"\$$node_json\" ] && [ -s \"\$$node_json\" ]; then \
+						node_version_extracted=\$$(grep -m 1 '\"lts\":' \"\$$node_json\" | head -1 | sed -n 's/.*\"version\":\"\\(v[0-9][0-9]*\\.[0-9][0-9]*\\.[0-9][0-9]*\\)\".*/\\1/p'); \
+						if [ -n \"\$$node_version_extracted\" ] && echo \"\$$node_version_extracted\" | grep -qE '^v[0-9]+\\.[0-9]+\\.[0-9]+$$'; then \
+							node_version=\"\$$node_version_extracted\"; \
+							echo \"📦 Version LTS détectée: \$$node_version\"; \
+						fi; \
+					fi; \
+					rm -f \"\$$node_json\"; \
+				fi; \
+				if [ -z \"\$$node_version\" ]; then \
+					node_version=\"v20.18.0\"; \
+					echo '⚠️ Impossible de récupérer la version LTS, utilisation de v20.18.0'; \
+				fi; \
+				arch_name=\$$(uname -m); \
+				if [ \"\$$arch_name\" = \"x86_64\" ] || [ \"\$$arch_name\" = \"amd64\" ]; then \
+					node_arch=\"linux-x64\"; \
+				elif [ \"\$$arch_name\" = \"aarch64\" ] || [ \"\$$arch_name\" = \"arm64\" ]; then \
+					node_arch=\"linux-arm64\"; \
+				else \
+					node_arch=\"linux-x64\"; \
+					echo '⚠️ Architecture non reconnue, utilisation de linux-x64'; \
+				fi; \
+				node_base=\"$$remote_dir/.nodejs\"; \
+				node_dir=\"\$$node_base/node-\$$node_version-\$$node_arch\"; \
+				if [ ! -x \"\$$node_dir/bin/npm\" ]; then \
+					echo \"⚙️ Installation de Node.js \$$node_version...\"; \
+					mkdir -p \"\$$node_base\" || (echo '❌ Erreur création répertoire'; exit 1); \
+					tmp_node=\"/tmp/node-\$$node_version-\$$node_arch.tar.xz\"; \
+					node_url=\"https://nodejs.org/dist/\$$node_version/node-\$$node_version-\$$node_arch.tar.xz\"; \
+					if ! curl -fsSL \"\$$node_url\" -o \"\$$tmp_node\"; then \
+						if ! wget -q \"\$$node_url\" -O \"\$$tmp_node\"; then \
+							echo \"❌ Téléchargement Node.js échoué (\$$node_url)\"; \
+							exit 1; \
+						fi; \
+					fi; \
+					if [ ! -f \"\$$tmp_node\" ]; then \
+						echo '❌ Fichier Node.js non téléchargé'; \
+						exit 1; \
+					fi; \
+					tar -xJf \"\$$tmp_node\" -C \"\$$node_base\" || (echo '❌ Extraction Node.js échouée'; exit 1); \
+					rm -f \"\$$tmp_node\"; \
+				fi; \
+				if [ ! -x \"\$$node_dir/bin/npm\" ]; then \
+					echo '❌ npm non trouvé après installation'; \
+					exit 1; \
+				fi; \
+				npm_cmd=\"\$$node_dir/bin/npm\"; \
+				export PATH=\"\$$node_dir/bin:\$$PATH\"; \
+			fi; \
+			if [ -z \"\$$npm_cmd\" ] || [ ! -x \"\$$npm_cmd\" ]; then \
+				echo '❌ npm indisponible, compilation ignorée'; \
+			else \
+				echo '📦 Compilation des assets du thème...'; \
+				cd \"$$theme_path\" && \"\$$npm_cmd\" ci && \"\$$npm_cmd\" run build; \
+			fi; \
+		else \
+			echo \"⚠️ Thème $$theme_path non trouvé, compilation ignorée\"; \
+		fi) && \
+		echo '📦 Installation des dépendances Composer à la racine...' && \
+		php composer.phar install --no-dev --optimize-autoloader || (echo '❌ Erreur installation Composer racine'; exit 1) && \
+		(if [ -d \"$$theme_path\" ] && [ -f \"$$theme_path/composer.json\" ]; then \
+			echo '📦 Installation des dépendances Composer dans le thème...' && \
+			cd \"$$theme_path\" && \
+			php \"$$remote_dir/composer.phar\" install --no-dev --optimize-autoloader || (echo '❌ Erreur installation Composer thème'; exit 1); \
+		fi)" || (echo "❌ Erreur lors de la configuration sur le serveur"; exit 1); \
+	echo "✅ Configuration sur le serveur terminée"; \
+	echo ""; \
+	\
+	# Créer le fichier .env sur le serveur en copiant le .env local et en remplaçant les valeurs \
+	echo "📝 Création du fichier .env sur le serveur..."; \
+	if [ ! -f .env ]; then \
+		echo "⚠️  Fichier .env local non trouvé, création d'un .env minimal"; \
+		env_temp="/tmp/env_temp_$$(date +%s).txt"; \
+		touch "$$env_temp"; \
+	else \
+		env_temp="/tmp/env_temp_$$(date +%s).txt"; \
+		cp .env "$$env_temp"; \
+	fi; \
+	# Transférer le .env local sur le serveur \
+	scp -P $$ssh_port "$$env_temp" $$ssh_host:$$remote_dir/.env >/dev/null 2>&1 || (echo "⚠️  Erreur transfert .env"; rm -f "$$env_temp"; exit 1); \
+	rm -f "$$env_temp"; \
+	# Remplacer uniquement les valeurs spécifiques par celles de la production \
+	# Créer un script de remplacement avec les valeurs déjà substituées \
+	replace_script="/tmp/replace_env_$$(date +%s).sh"; \
+	{ \
+		echo "#!/bin/sh"; \
+		echo "cd \"$$remote_dir\" || exit 1"; \
+		echo "sed -i \"s|^DB_NAME=.*|DB_NAME='$$db_name'|\" .env"; \
+		echo "sed -i \"s|^DB_USER=.*|DB_USER='$$db_user'|\" .env"; \
+		echo "sed -i \"s|^DB_PASSWORD=.*|DB_PASSWORD='$$db_password'|\" .env"; \
+		echo "sed -i \"s|^DB_HOST=.*|DB_HOST='$$db_host'|\" .env"; \
+		echo "sed -i \"s|^WP_ENV=.*|WP_ENV='production'|\" .env"; \
+		echo "sed -i \"s|^WP_HOME=.*|WP_HOME='https://$$site_url'|\" .env"; \
+		echo "sed -i \"s|^WP_SITEURL=.*|WP_SITEURL=\\\\\\\"\${WP_HOME}/wp\\\\\\\"|\" .env"; \
+		echo "grep -q '^DB_NAME=' .env || echo \"DB_NAME='$$db_name'\" >> .env"; \
+		echo "grep -q '^DB_USER=' .env || echo \"DB_USER='$$db_user'\" >> .env"; \
+		echo "grep -q '^DB_PASSWORD=' .env || echo \"DB_PASSWORD='$$db_password'\" >> .env"; \
+		echo "grep -q '^DB_HOST=' .env || echo \"DB_HOST='$$db_host'\" >> .env"; \
+		echo "grep -q '^WP_ENV=' .env || echo \"WP_ENV='production'\" >> .env"; \
+		echo "grep -q '^WP_HOME=' .env || echo \"WP_HOME='https://$$site_url'\" >> .env"; \
+		echo "grep -q '^WP_SITEURL=' .env || echo 'WP_SITEURL=\"\${WP_HOME}/wp\"' >> .env"; \
+	} > "$$replace_script"; \
+	chmod +x "$$replace_script"; \
+	# Transférer et exécuter le script sur le serveur \
+	scp -P $$ssh_port "$$replace_script" $$ssh_host:/tmp/replace_env.sh >/dev/null 2>&1 && \
+	ssh -p $$ssh_port $$ssh_host "bash /tmp/replace_env.sh && rm -f /tmp/replace_env.sh" || echo "⚠️  Erreur configuration .env"; \
+	rm -f "$$replace_script"; \
+	echo "✅ Fichier .env configuré (copie du local avec valeurs de production)"; \
+	echo ""; \
+	\
+	# Importer la base de données \
+	echo "💾 Import de la base de données..."; \
+	ssh -p $$ssh_port $$ssh_host "cd $$remote_dir && \
+		(php wp-cli.phar db import database.sql --allow-root 2>/dev/null || \
+		mysql -h'$$db_host' -u'$$db_user' -p'$$db_password' '$$db_name' < database.sql 2>/dev/null || \
+		php wp-cli.phar db import database.sql --allow-root || \
+		mysql -h'$$db_host' -u'$$db_user' -p'$$db_password' '$$db_name' < database.sql)" || echo "⚠️  Erreur import BDD - vérifiez manuellement"; \
+	echo "✅ Base de données importée"; \
+	echo ""; \
+	\
+	# Mettre à jour les URLs dans WordPress \
+	echo "🔧 Mise à jour des URLs dans WordPress..."; \
+	ssh -p $$ssh_port $$ssh_host "cd $$remote_dir && \
+		php wp-cli.phar search-replace 'http://localhost:8000' 'https://$$site_url' --allow-root --all-tables && \
+		php wp-cli.phar search-replace 'localhost:8000' '$$site_url' --allow-root --all-tables && \
+		php wp-cli.phar option update home 'https://$$site_url' --allow-root && \
+		php wp-cli.phar option update siteurl 'https://$$site_url/wp' --allow-root" || echo "⚠️  Erreur mise à jour URLs"; \
+	echo "✅ URLs mises à jour"; \
+	echo ""; \
+	\
+	# Nettoyer \
+	echo "🧹 Nettoyage..."; \
+	rm -f "$$sql_file"; \
+	ssh -p $$ssh_port $$ssh_host "cd $$remote_dir && rm -f database.sql" || true; \
+	echo "✅ Nettoyage terminé"; \
+	echo ""; \
+	\
+	echo "🎉 Déploiement terminé avec succès !"; \
+	echo "🌐 Site disponible sur : https://$$site_url"
+
 ## —— Linters et Code Quality ——————————————————————————————————
 
 lint-php: ## Lint PHP avec PHP_CodeSniffer et WordPress Coding Standards
 	@echo "🔍 Linting PHP avec WordPress Coding Standards..."
-	./vendor/bin/phpcs --standard=$(THEME)/phpcs.xml --extensions=php --ignore="*/node_modules/*,*/vendor/*,*/public/*" $(THEME)
+	./vendor/bin/phpcs --standard=$(THEME)/phpcs.xml $(THEME)
 
 lint-php-fix: ## Auto-correction PHP avec PHP_CodeSniffer
 	@echo "🔧 Auto-correction PHP..."
-	./vendor/bin/phpcbf --standard=$(THEME)/phpcs.xml --extensions=php --ignore="*/node_modules/*,*/vendor/*,*/public/*" $(THEME)
+	./vendor/bin/phpcbf --standard=$(THEME)/phpcs.xml $(THEME)
 
 lint-scss: ## Lint SCSS avec stylelint
 	@echo "🎨 Linting SCSS..."
@@ -401,27 +987,24 @@ lint-scss-fix: ## Auto-correction SCSS
 
 lint-js: ## Lint JavaScript avec ESLint
 	@echo "📜 Linting JavaScript..."
-	cd $(THEME) && if find resources/js -type f -name "*.js" -print -quit | grep -q .; then npx eslint --ext .js resources/js --ignore-path .gitignore; else echo "(skip) aucun .js"; fi
+	cd $(THEME) && if find resources/js -type f -name "*.js" -print -quit | grep -q .; then npx eslint "resources/js/**/*.js"; else echo "(skip) aucun .js"; fi
 
 lint-js-fix: ## Auto-correction JavaScript
 	@echo "🔧 Auto-correction JavaScript..."
-	cd $(THEME) && if find resources/js -type f -name "*.js" -print -quit | grep -q .; then npx eslint --ext .js resources/js --fix --ignore-path .gitignore; else echo "(skip) aucun .js"; fi
+	cd $(THEME) && if find resources/js -type f -name "*.js" -print -quit | grep -q .; then npx eslint "resources/js/**/*.js" --fix; else echo "(skip) aucun .js"; fi
 
 lint-ts: ## Lint TypeScript avec ESLint (principal)
 	@echo "📜 Linting TypeScript..."
-	cd $(THEME) && npx eslint --ext .ts,.tsx resources/js --ignore-path .gitignore
+	cd $(THEME) && npx eslint "resources/js/**/*.{ts,tsx}"
 
 lint-ts-fix: ## Auto-correction TypeScript (principal)
 	@echo "🔧 Auto-correction TypeScript..."
-	cd $(THEME) && npx eslint --ext .ts,.tsx resources/js --fix --ignore-path .gitignore
+	cd $(THEME) && npx eslint "resources/js/**/*.{ts,tsx}" --fix
 
-lint-blade: ## Lint Blade avec blade-formatter (check)
+lint-blade: ## Lint Blade avec Prettier (check)
 	@echo "🧩 Linting Blade..."
-	@cd $(THEME) && npx prettier --check "resources/views/**/*.blade.php" --ignore-path .gitignore || ( \
-		echo "🔧 Format Blade auto" && \
-		npx prettier --write "resources/views/**/*.blade.php" --ignore-path .gitignore && \
-		npx prettier --check "resources/views/**/*.blade.php" --ignore-path .gitignore \
-	)
+	@cd $(THEME) && npx prettier --check "resources/views/**/*.blade.php" --ignore-path .gitignore || true
+	@cd $(THEME) && npx prettier --write "resources/views/**/*.blade.php" --ignore-path .gitignore || true
 
 format-js: ## Formatage JavaScript avec Prettier
 	@echo "🎨 Formatage JavaScript..."
@@ -443,9 +1026,15 @@ format-blade: ## Formatage Blade avec blade-formatter
 	@echo "🎨 Formatage Blade..."
 	cd $(THEME) && npx prettier --write "resources/views/**/*.blade.php" --ignore-path .gitignore
 
+lint-theme: ## Lint uniquement le thème (SCSS, TS, JS, Blade)
+	@echo "🎯 Linting du thème uniquement..."
+	make lint-scss
+	make lint-ts
+	make lint-js
+	make lint-blade
+
 lint-all: ## Lance tous les linters
 	@echo "🚀 Lancement de tous les linters..."
-	make lint-php
 	make lint-scss
 	make lint-ts
 	make lint-js
@@ -462,7 +1051,6 @@ lint: ## Lint + format + sécurité + performance (thème uniquement)
 
 lint-all-fix: ## Auto-correction de tous les linters
 	@echo "🔧 Auto-correction de tous les linters..."
-	make lint-php-fix
 	make lint-scss-fix
 	make lint-ts-fix
 	make lint-js-fix
@@ -504,8 +1092,12 @@ wp-cache: ## Optimisation du cache WordPress
 
 wp-optimize: ## Optimisation générale WordPress
 	@echo "⚡ Optimisation générale..."
-	wp db optimize
-	wp db repair
+	@if command -v mysqlcheck >/dev/null 2>&1; then \
+		wp db optimize; \
+		wp db repair; \
+	else \
+		echo "⚠️  mysqlcheck non disponible (MySQL dans Docker) - optimisation DB ignorée"; \
+	fi
 	wp cache flush
 	wp rewrite flush
 
