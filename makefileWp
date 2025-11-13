@@ -315,6 +315,35 @@ install-theme:
 	sed -i "s/editor\.css/editor.scss/" $(THEME)/app/setup.php
 	# Ajouter @stack('vite-head') après @vite dans le layout pour permettre aux pages d'ajouter leurs assets
 	sed -i "/@vite.*app\.scss/a\    @stack('vite-head')" $(THEME)/resources/views/layouts/app.blade.php
+	# Ajouter la configuration ACF pour l'export JSON
+	@echo '' >> $(THEME)/app/setup.php
+	@echo '/**' >> $(THEME)/app/setup.php
+	@echo ' * Configure ACF to save JSON files in the theme directory.' >> $(THEME)/app/setup.php
+	@echo ' * This allows versioning ACF field groups in Git.' >> $(THEME)/app/setup.php
+	@echo ' *' >> $(THEME)/app/setup.php
+	@echo ' * @return void' >> $(THEME)/app/setup.php
+	@echo ' */' >> $(THEME)/app/setup.php
+	@echo 'add_filter('\''acf/settings/save_json'\'', function ($$path) {' >> $(THEME)/app/setup.php
+	@echo '    // Save JSON files in the theme'\''s acf-json directory' >> $(THEME)/app/setup.php
+	@echo '    $$path = get_stylesheet_directory() . '\''/acf-json'\'';' >> $(THEME)/app/setup.php
+	@echo '    ' >> $(THEME)/app/setup.php
+	@echo '    // Create directory if it doesn'\''t exist' >> $(THEME)/app/setup.php
+	@echo '    if (!file_exists($$path)) {' >> $(THEME)/app/setup.php
+	@echo '        wp_mkdir_p($$path);' >> $(THEME)/app/setup.php
+	@echo '    }' >> $(THEME)/app/setup.php
+	@echo '    ' >> $(THEME)/app/setup.php
+	@echo '    return $$path;' >> $(THEME)/app/setup.php
+	@echo '});' >> $(THEME)/app/setup.php
+	@echo '' >> $(THEME)/app/setup.php
+	@echo 'add_filter('\''acf/settings/load_json'\'', function ($$paths) {' >> $(THEME)/app/setup.php
+	@echo '    // Load JSON files from the theme'\''s acf-json directory' >> $(THEME)/app/setup.php
+	@echo '    $$paths[] = get_stylesheet_directory() . '\''/acf-json'\'';' >> $(THEME)/app/setup.php
+	@echo '    ' >> $(THEME)/app/setup.php
+	@echo '    return $$paths;' >> $(THEME)/app/setup.php
+	@echo '});' >> $(THEME)/app/setup.php
+	# Créer le répertoire acf-json
+	@mkdir -p $(THEME)/acf-json
+	@touch $(THEME)/acf-json/.gitkeep
 	@echo "🎨 Thème Sage installé avec Vite et SCSS prêt à compiler"
 	mkdir -p $(THEME)/resources/css/pages
 	mkdir -p $(THEME)/resources/css/utilities
@@ -1048,6 +1077,12 @@ lint: ## Lint + format + sécurité + performance (thème uniquement)
 	make wp-security
 	make wp-cache
 	make wp-optimize
+
+lint-ci: ## Lint pour CI/CD (sans WordPress)
+	@echo "🚀 Lint CI/CD — lint, format, sécurité (sans WordPress)"
+	make format-all
+	make lint-all
+	make security-check
 
 lint-all-fix: ## Auto-correction de tous les linters
 	@echo "🔧 Auto-correction de tous les linters..."

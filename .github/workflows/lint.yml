@@ -1,0 +1,75 @@
+name: Lint
+
+on:
+  pull_request:
+    branches:
+      - develop
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, xml, curl, zip, gd, mysql, pdo, pdo_mysql
+          coverage: none
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.composer/cache
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Install Composer dependencies
+        run: |
+          if [ -f composer.json ]; then
+            composer install --no-interaction --prefer-dist --optimize-autoloader
+          fi
+
+      - name: Cache Node modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            **/node_modules
+            **/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json', '**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install Node dependencies
+        run: |
+          if [ -f package.json ]; then
+            npm ci
+          fi
+          # Installer les dépendances du thème si présent
+          if [ -d "web/app/themes/wp" ] && [ -f "web/app/themes/wp/package.json" ]; then
+            cd web/app/themes/wp && npm ci && cd ../../..
+          fi
+
+      - name: Run lint
+        run: |
+          # Utiliser makefileWp si présent, sinon makefile
+          if [ -f makefileWp ]; then
+            make -f makefileWp lint-ci
+          elif [ -f makefile ]; then
+            make lint-ci
+          else
+            echo "❌ Aucun makefile trouvé"
+            exit 1
+          fi
+
