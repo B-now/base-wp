@@ -1,0 +1,209 @@
+name: Deploy
+
+# Template de workflow de déploiement
+# Le nom du projet est détecté automatiquement depuis le makefile ou la structure des thèmes
+# Configurez les secrets GitHub suivants dans votre repository :
+#   * HOST_SSH_PREPROD / HOST_SSH_PROD - Host SSH (ex: ubuntu@host.com ou user@host.com:port)
+#   * MDP_SSH_PREPROD / MDP_SSH_PROD - Clé privée SSH complète (pas un mot de passe)
+#   * PATH_PROJECT_PREPROD / PATH_PROJECT_PROD - Chemin du projet sur le serveur (ex: /home/user/www/projet)
+
+on:
+  push:
+    branches:
+      - preprod
+      - main
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.ref == 'refs/heads/main' && 'Production' || 'Preprod' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect project name
+        id: detect-name
+        run: |
+          # Essayer de lire depuis le makefile
+          if [ -f makefile ]; then
+            PROJECT_NAME=$(grep -E "^NAME\s*=" makefile | head -1 | sed 's/.*=\s*//' | tr -d ' ' || echo "")
+          fi
+          # Si non trouvé, détecter depuis la structure des thèmes
+          if [ -z "$PROJECT_NAME" ] && [ -d "web/app/themes" ]; then
+            # Lister les thèmes et exclure les thèmes WordPress par défaut
+            PROJECT_NAME=$(ls -1 web/app/themes/ 2>/dev/null | grep -v -E "^(twentytwenty|twenty)" | head -1 || echo "")
+          fi
+          # Fallback sur "wp" si toujours vide
+          PROJECT_NAME=${PROJECT_NAME:-wp}
+          echo "name=$PROJECT_NAME" >> $GITHUB_OUTPUT
+          echo "🔍 Nom du projet détecté: $PROJECT_NAME"
+
+      - name: Deploy to server
+        env:
+          DEPLOY_ENV: ${{ github.ref == 'refs/heads/main' && 'PROD' || 'PREPROD' }}
+          SSH_HOST: ${{ github.ref == 'refs/heads/main' && secrets.HOST_SSH_PROD || secrets.HOST_SSH_PREPROD }}
+          SSH_KEY: ${{ github.ref == 'refs/heads/main' && secrets.MDP_SSH_PROD || secrets.MDP_SSH_PREPROD }}
+          PROJECT_PATH: ${{ github.ref == 'refs/heads/main' && secrets.PATH_PROJECT_PROD || secrets.PATH_PROJECT_PREPROD }}
+          PROJECT_NAME: ${{ steps.detect-name.outputs.name }}
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          # Configuration SSH
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          
+          # Extraire host et port depuis SSH_HOST
+          SSH_USER=$(echo "$SSH_HOST" | cut -d'@' -f1)
+          SSH_HOST_FULL=$(echo "$SSH_HOST" | cut -d'@' -f2)
+          SSH_HOST_ONLY=$(echo "$SSH_HOST_FULL" | cut -d':' -f1)
+          SSH_PORT=$(echo "$SSH_HOST_FULL" | grep -oE ':[0-9]+$' | cut -d':' -f2)
+          SSH_PORT=${SSH_PORT:-22}
+          
+          # Ajouter le host à known_hosts
+          ssh-keyscan -p "$SSH_PORT" -H "$SSH_HOST_ONLY" >> ~/.ssh/known_hosts 2>/dev/null || true
+          
+          # Déployer sur le serveur
+          ssh -i ~/.ssh/deploy_key -p "$SSH_PORT" "$SSH_USER@$SSH_HOST_ONLY" "PROJECT_PATH='$PROJECT_PATH' BRANCH_NAME='$BRANCH_NAME' PROJECT_NAME='$PROJECT_NAME' DEPLOY_ENV='$DEPLOY_ENV' bash -s" << 'DEPLOY_EOF'
+            set -e
+            cd "$PROJECT_PATH" || exit 1
+            
+            echo "🚀 Déploiement environnement: $DEPLOY_ENV"
+            echo "📥 Mise à jour du code depuis Git..."
+            git fetch --all
+            git reset --hard "origin/$BRANCH_NAME" || git reset --hard origin/main || exit 1
+            echo "✅ Code mis à jour"
+            
+            echo "📦 Installation des dépendances Composer à la racine..."
+            if [ -f composer.phar ]; then
+              php composer.phar install --no-dev --optimize-autoloader
+            elif command -v composer >/dev/null 2>&1; then
+              composer install --no-dev --optimize-autoloader
+            else
+              echo "❌ Composer non trouvé"
+              exit 1
+            fi
+            echo "✅ Dépendances Composer racine installées"
+            
+            echo "📦 Installation des dépendances Composer dans le thème..."
+            if [ -d "web/app/themes/$PROJECT_NAME" ] && [ -f "web/app/themes/$PROJECT_NAME/composer.json" ]; then
+              cd "web/app/themes/$PROJECT_NAME"
+              if [ -f ../../composer.phar ]; then
+                php ../../composer.phar install --no-dev --optimize-autoloader
+              elif [ -f ../composer.phar ]; then
+                php ../composer.phar install --no-dev --optimize-autoloader
+              elif command -v composer >/dev/null 2>&1; then
+                composer install --no-dev --optimize-autoloader
+              fi
+              cd "$PROJECT_PATH"
+            fi
+            echo "✅ Dépendances Composer thème installées"
+            
+            echo "📦 Compilation des assets du thème..."
+            if [ -d "web/app/themes/$PROJECT_NAME" ]; then
+              cd "web/app/themes/$PROJECT_NAME"
+              if [ -f package.json ]; then
+                npm_cmd=$(command -v npm 2>/dev/null || printf '')
+                if [ -z "$npm_cmd" ]; then
+                  node_version="v20.18.0"
+                  node_base="$PROJECT_PATH/.nodejs"
+                  arch_name=$(uname -m)
+                  case "$arch_name" in
+                    x86_64|amd64) node_arch="linux-x64" ;;
+                    aarch64|arm64) node_arch="linux-arm64" ;;
+                    *) node_arch="linux-x64"; echo "⚠️  Architecture inconnue ($arch_name), utilisation de linux-x64" ;;
+                  esac
+                  node_dir="$node_base/node-$node_version-$node_arch"
+                  if [ ! -x "$node_dir/bin/npm" ]; then
+                    echo "⚙️ Installation de Node.js $node_version..."
+                    mkdir -p "$node_base"
+                    tmp_node="/tmp/node-$node_version-$node_arch.tar.xz"
+                    node_url="https://nodejs.org/dist/$node_version/node-$node_version-$node_arch.tar.xz"
+                    if command -v curl >/dev/null 2>&1; then
+                      curl -fsSL "$node_url" -o "$tmp_node"
+                    elif command -v wget >/dev/null 2>&1; then
+                      wget -q "$node_url" -O "$tmp_node"
+                    else
+                      echo "❌ ni curl ni wget disponibles pour télécharger Node.js"
+                      exit 1
+                    fi
+                    if [ ! -s "$tmp_node" ]; then
+                      echo "❌ Téléchargement de Node.js échoué ($node_url)"
+                      exit 1
+                    fi
+                    tar -xJf "$tmp_node" -C "$node_base"
+                    rm -f "$tmp_node"
+                  fi
+                  if [ -x "$node_dir/bin/npm" ]; then
+                    npm_cmd="$node_dir/bin/npm"
+                    export PATH="$node_dir/bin:$PATH"
+                  else
+                    echo "❌ npm non disponible après installation de Node.js"
+                  fi
+                else
+                  export PATH="$(dirname "$npm_cmd"):$PATH"
+                fi
+                if [ -n "$npm_cmd" ] && [ -x "$npm_cmd" ]; then
+                  "$npm_cmd" ci
+                  "$npm_cmd" run build
+                  echo "✅ Assets compilés"
+                else
+                  echo "⚠️  npm non disponible, vérifiez que les assets sont compilés"
+                fi
+              else
+                echo "⚠️  package.json non trouvé dans le thème"
+              fi
+              cd "$PROJECT_PATH"
+            else
+              echo "⚠️  Thème non trouvé: web/app/themes/$PROJECT_NAME"
+            fi
+            
+            echo "📥 Import des champs ACF depuis JSON..."
+            if [ -d "web/app/themes/$PROJECT_NAME/acf-json" ]; then
+              # Compter les fichiers JSON
+              json_count=$(find "web/app/themes/$PROJECT_NAME/acf-json" -name "*.json" -type f | wc -l)
+              if [ "$json_count" -gt 0 ]; then
+                echo "  📋 ${json_count} fichier(s) JSON trouvé(s)"
+                # Télécharger/installer WP-CLI si nécessaire
+                if [ ! -f wp-cli.phar ] && ! command -v wp >/dev/null 2>&1; then
+                  echo "📥 Téléchargement de WP-CLI..."
+                  if command -v curl >/dev/null 2>&1; then
+                    curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+                  elif command -v wget >/dev/null 2>&1; then
+                    wget https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+                  fi
+                  if [ -f wp-cli.phar ]; then
+                    chmod +x wp-cli.phar
+                    echo "✅ WP-CLI téléchargé"
+                  fi
+                fi
+                # Déterminer la commande WP-CLI
+                if [ -f wp-cli.phar ]; then
+                  wp_cmd="php wp-cli.phar"
+                elif command -v wp >/dev/null 2>&1; then
+                  wp_cmd="wp"
+                else
+                  wp_cmd=""
+                fi
+                # Installer WP-CLI ACF extension si WP-CLI est disponible
+                if [ -n "$wp_cmd" ]; then
+                  echo "🔧 Installation de WP-CLI ACF extension..."
+                  $wp_cmd package install https://github.com/elliotcondon/acf-command/archive/master.zip --allow-root 2>/dev/null || \
+                  $wp_cmd package install acf-command --allow-root 2>/dev/null || \
+                  echo "⚠️  Installation WP-CLI ACF extension échouée, tentative de sync directe..."
+                  # Tenter la synchronisation ACF
+                  echo "🔄 Synchronisation des champs ACF..."
+                  $wp_cmd acf sync --allow-root 2>/dev/null && echo "✅ Champs ACF synchronisés" || echo "⚠️  Sync ACF non disponible (les fichiers JSON seront chargés automatiquement au prochain chargement WordPress)"
+                else
+                  echo "⚠️  WP-CLI non disponible, les fichiers JSON seront chargés automatiquement au prochain chargement WordPress"
+                fi
+                echo "✅ Champs ACF prêts"
+              else
+                echo "⚠️  Aucun fichier JSON trouvé dans acf-json/"
+              fi
+            else
+              echo "⚠️  Répertoire acf-json non trouvé"
+            fi
+            
+            echo "🎉 Déploiement terminé avec succès !"
+          DEPLOY_EOF

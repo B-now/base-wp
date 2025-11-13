@@ -1,2 +1,11 @@
 .idea
 .env
+
+# Node.js (installation locale)
+.nodejs/
+
+# Composer
+composer.phar
+
+# WP-CLI
+wp-cli.phar

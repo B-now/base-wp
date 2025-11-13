@@ -13,7 +13,7 @@ ADMIN_EMAIL ?= admin@example.com
 
 ## -------- SETUP PROJECT --------
 
-install-wp: check-env create-bedrock copy-env update-env generate-salts install-acf start-docker configure-wp install-contact-form install-theme seed-css theme-deps configure-vite activate-theme update-themes update-translations open-phpstorm
+install-wp: check-env create-bedrock copy-env update-env update-gitignore generate-salts install-acf start-docker configure-wp install-contact-form install-theme seed-css theme-deps configure-vite activate-theme update-themes update-translations open-phpstorm
 	@echo "🎉 Projet $(NAME) prêt !"
 
 check-env: ## Vérifie et crée le fichier .env si nécessaire
@@ -46,6 +46,38 @@ update-env: ## Met à jour le fichier .env et docker-compose.yaml
 	fi
 	@if ! grep -q '^WP_SITEURL=' ./$(PROJECT_DIR)/.env; then \
 		echo "WP_SITEURL='http://localhost:8000/wp'" >> ./$(PROJECT_DIR)/.env; \
+	fi
+
+update-gitignore: ## Met à jour le .gitignore avec les entrées personnalisées
+	@echo "📝 Mise à jour du .gitignore..."
+	@if [ -f ./$(PROJECT_DIR)/.gitignore ]; then \
+		gitignore_file="./$(PROJECT_DIR)/.gitignore"; \
+		if ! grep -q "^composer.phar$$" "$$gitignore_file"; then \
+			if grep -q "^auth.json$$" "$$gitignore_file"; then \
+				sed -i '/^auth.json$$/a composer.phar' "$$gitignore_file"; \
+			else \
+				echo "composer.phar" >> "$$gitignore_file"; \
+			fi; \
+		fi; \
+		if ! grep -q "^wp-cli.phar$$" "$$gitignore_file"; then \
+			if grep -q "^wp-cli.local.yml$$" "$$gitignore_file"; then \
+				sed -i '/^wp-cli.local.yml$$/a wp-cli.phar' "$$gitignore_file"; \
+			elif grep -q "^# WP-CLI" "$$gitignore_file"; then \
+				sed -i '/^# WP-CLI$$/a wp-cli.phar' "$$gitignore_file"; \
+			else \
+				echo "" >> "$$gitignore_file"; \
+				echo "# WP-CLI" >> "$$gitignore_file"; \
+				echo "wp-cli.phar" >> "$$gitignore_file"; \
+			fi; \
+		fi; \
+		if ! grep -q "^\.nodejs/$$" "$$gitignore_file"; then \
+			echo "" >> "$$gitignore_file"; \
+			echo "# Node.js (installation locale)" >> "$$gitignore_file"; \
+			echo ".nodejs/" >> "$$gitignore_file"; \
+		fi; \
+		echo "✅ .gitignore mis à jour"; \
+	else \
+		echo "⚠️  .gitignore non trouvé"; \
 	fi
 
 generate-salts: ## Remplace directement les salts dans .env
