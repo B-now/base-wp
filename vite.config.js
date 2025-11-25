@@ -9,10 +9,11 @@ import path from 'path'
 const pagesStylesFiles = fg.sync('resources/css/pages/**/*.scss')
 const pagesScriptsFiles = fg.sync('resources/js/pages/**/*.{js,ts}')
 const componentsStylesFiles = fg.sync('resources/css/components/**/*.scss')
-
+const componentsScriptsFiles = fg.sync('resources/js/components/**/*.{js,ts}')
 console.log('🔍 Styles Pages:', pagesStylesFiles)
 console.log('🔍 Scripts Pages:', pagesScriptsFiles)
 console.log('🔍 Styles Components:', componentsStylesFiles)
+console.log('🔍 Scripts Components:', componentsScriptsFiles)
 
 export default defineConfig({
   server: {
@@ -39,6 +40,7 @@ export default defineConfig({
         ...pagesStylesFiles,
         ...pagesScriptsFiles,
         ...componentsStylesFiles,
+        ...componentsScriptsFiles,
       ],
       refresh: true,
     }),
