@@ -8,9 +8,11 @@ import path from 'path'
 // 🔍 Scan automatique des fichiers pages
 const pagesStylesFiles = fg.sync('resources/css/pages/**/*.scss')
 const pagesScriptsFiles = fg.sync('resources/js/pages/**/*.{js,ts}')
+const componentsStylesFiles = fg.sync('resources/css/components/**/*.scss')
 
 console.log('🔍 Styles Pages:', pagesStylesFiles)
 console.log('🔍 Scripts Pages:', pagesScriptsFiles)
+console.log('🔍 Styles Components:', componentsStylesFiles)
 
 export default defineConfig({
   server: {
@@ -36,6 +38,7 @@ export default defineConfig({
         'resources/js/editor.ts',
         ...pagesStylesFiles,
         ...pagesScriptsFiles,
+        ...componentsStylesFiles,
       ],
       refresh: true,
     }),

@@ -31,6 +31,7 @@ copy-env: ## Copie les fichiers nécessaires
 	cp ./makefileWp ./$(PROJECT_DIR)/makefile
 	cp ./docker-compose.yaml ./$(PROJECT_DIR)/docker-compose.yaml
 	cp ./$(PROJECT_DIR)/.env.example ./$(PROJECT_DIR)/.env
+	cp -r ./.github ./$(PROJECT_DIR)/.github
 
 update-env: ## Met à jour le fichier .env et docker-compose.yaml
 	sed -i 's/bdd/$(NAME)/' ./$(PROJECT_DIR)/docker-compose.yaml
