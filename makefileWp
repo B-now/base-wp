@@ -297,7 +297,8 @@ install-theme:
 	cd web/app/themes && composer create-project roots/sage $(NAME) --no-interaction
 	cd $(THEME) && npm install
 	cd $(THEME) && npm uninstall -D @tailwindcss/vite tailwindcss || true
-	cd $(THEME) && npm install -D sass typescript @types/node
+	# typescript-eslint (npm) impose encore typescript < 6.0.0 ; Sage peut tirer TS 6 par défaut
+	cd $(THEME) && npm install -D sass "typescript@^5.8.0" @types/node
 	cd $(THEME) && npm install -D eslint @eslint/js typescript-eslint stylelint stylelint-config-standard-scss prettier prettier-plugin-blade
 
 	mv $(THEME)/resources/css/app.css $(THEME)/resources/css/app.scss
